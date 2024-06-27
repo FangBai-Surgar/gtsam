@@ -1,28 +1,11 @@
-/* ----------------------------------------------------------------------------
-
- * GTSAM Copyright 2010, Georgia Tech Research Corporation,
- * Atlanta, Georgia 30332-0415
- * All Rights Reserved
- * Authors: Frank Dellaert, et al. (see THANKS for the full author list)
-
- * See LICENSE for the license information
-
- * -------------------------------------------------------------------------- */
-
 
 /**
- * @file gtsam/slam/UncalibratedProjectionFactor_Fang.h.h
- *
- * @brief Bundle adjustment factor (or SfM factor) with an unknown calibration.  
- * The camera type (which specifies the calibratable paramters) is templated in the Factor class.
-
- * The following factor implements the case where only the folcal lenth is varying duing calibration: 
- * UncalibratedProjectionFactor<Cal3_f>
- * 
- * 
+ * @file gtsam/slam/Fang_SelfCalibrationTypes.h
+ * @brief Implementation of camera calibration and lens distortion types
  * @date June 10, 2024
  * @author Fang Bai
  */
+
 
 #pragma once
 

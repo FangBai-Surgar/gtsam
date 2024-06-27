@@ -1,25 +1,8 @@
-/* ----------------------------------------------------------------------------
-
- * GTSAM Copyright 2010, Georgia Tech Research Corporation,
- * Atlanta, Georgia 30332-0415
- * All Rights Reserved
- * Authors: Frank Dellaert, et al. (see THANKS for the full author list)
-
- * See LICENSE for the license information
-
- * -------------------------------------------------------------------------- */
-
 
 /**
- * @file gtsam/slam/UncalibratedProjectionFactor_Fang.h.h
- *
- * @brief Bundle adjustment factor (or SfM factor) with an unknown calibration.  
- * The camera type (which specifies the calibratable paramters) is templated in the Factor class.
-
- * The following factor implements the case where only the folcal lenth is varying duing calibration: 
- * UncalibratedProjectionFactor<Cal3_f>
- * 
- * 
+ * @file gtsam/slam/Fang_SelfCalibrationFactors.h.h
+ * @brief Implementation of self-calibration factors. 
+ * At its core, these factors formulate a reprojection cost function by allowing adjustable calibration and distortion parameters.
  * @date June 10, 2024
  * @author Fang Bai
  */
@@ -184,7 +167,7 @@ struct traits<UncalibratedProjectionFactor<CALIBRATION> > : Testable<
  * 
  * @brief a general SFM factor with an unknown calibration and distortion coefficients
  * 
- * minimise \sum_j || proj (K[R_j X + t_j]) - undistort (img_pts) || over (K, R_j, t_j, X)
+ * minimise \sum_j || proj (K[R_j X + t_j]) - undistort_kappa (img_pts) || over (K, R_j, t_j, X, kappa)
  * 
  */
 
@@ -196,7 +179,9 @@ template<class CALIBRATION, class LENSDISTORT>
 class UncalibratedProjectionDistortedImageFactor : public NoiseModelFactorN<Pose3, Point3, CALIBRATION, LENSDISTORT> {
 
   GTSAM_CONCEPT_MANIFOLD_TYPE(CALIBRATION)
+  GTSAM_CONCEPT_MANIFOLD_TYPE(LENSDISTORT)
   static const int DimK = FixedDimension<CALIBRATION>::value;
+  static const int DimD = FixedDimension<LENSDISTORT>::value;
 
 
 protected:
@@ -208,7 +193,6 @@ public:
 
   typedef UncalibratedProjectionDistortedImageFactor<CALIBRATION, LENSDISTORT> This;
   typedef PinholeCamera<CALIBRATION> Camera;///< typedef for camera type
-  typedef LENSDISTORT Distortion;
   typedef NoiseModelFactorN<Pose3, Point3, CALIBRATION, LENSDISTORT> Base;///< typedef for the base class
 
   // shorthand for a smart pointer to a factor
@@ -264,7 +248,7 @@ public:
       if (H1) *H1 = Matrix::Zero(2, 6);
       if (H2) *H2 = Matrix::Zero(2, 3);
       if (H3) *H3 = Matrix::Zero(2, DimK);
-      if (H4) *H4 = Matrix::Zero(2, 1);
+      if (H4) *H4 = Matrix::Zero(2, DimD);
       std::cout << e.what() << ": Landmark "<< DefaultKeyFormatter(this->key2())
       << " behind Camera " << DefaultKeyFormatter(this->key1()) << std::endl;
     }
@@ -317,7 +301,7 @@ struct traits< UncalibratedProjectionDistortedImageFactor<CALIBRATION, LENSDISTO
  * 
  * @brief a general SFM factor with an unknown calibration and distortion coefficients
  * 
- * minimise \sum_j || dist(proj (K[R_j X + t_j])) - img_pts || over (K, R_j, t_j, X)
+ * minimise \sum_j || dist_kappa (proj (K[R_j X + t_j])) - img_pts || over (K, R_j, t_j, X, kappa)
  * 
  */
 
@@ -329,7 +313,9 @@ template<class CALIBRATION, class LENSDISTORT>
 class DistortedUncalibratedProjectionFactor : public NoiseModelFactorN<Pose3, Point3, CALIBRATION, LENSDISTORT> {
 
   GTSAM_CONCEPT_MANIFOLD_TYPE(CALIBRATION)
+  GTSAM_CONCEPT_MANIFOLD_TYPE(LENSDISTORT)
   static const int DimK = FixedDimension<CALIBRATION>::value;
+  static const int DimD = FixedDimension<LENSDISTORT>::value;
 
 
 protected:
@@ -341,7 +327,6 @@ public:
 
   typedef DistortedUncalibratedProjectionFactor<CALIBRATION, LENSDISTORT> This;
   typedef PinholeCamera<CALIBRATION> Camera;///< typedef for camera type
-  typedef LENSDISTORT Distortion;
   typedef NoiseModelFactorN<Pose3, Point3, CALIBRATION, LENSDISTORT> Base;///< typedef for the base class
 
   // shorthand for a smart pointer to a factor
@@ -399,7 +384,7 @@ public:
       if (H1) *H1 = Matrix::Zero(2, 6);
       if (H2) *H2 = Matrix::Zero(2, 3);
       if (H3) *H3 = Matrix::Zero(2, DimK);
-      if (H4) *H4 = Matrix::Zero(2, 1);
+      if (H4) *H4 = Matrix::Zero(2, DimD);
       std::cout << e.what() << ": Landmark "<< DefaultKeyFormatter(this->key2())
       << " behind Camera " << DefaultKeyFormatter(this->key1()) << std::endl;
     }

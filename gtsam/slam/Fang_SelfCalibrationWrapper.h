@@ -1,15 +1,13 @@
 
-
-#pragma once
-
-
-
 /**
  * @file gtsam/slam/Fang_SelfCalibrationWrapper.h.
- * @brief A wrapper class to use self-calibration module in GTSAM
+ * @brief A wrapper template class to use self-calibration module in GTSAM
  * @date June 20, 2024
  * @author Fang Bai
  */
+
+
+#pragma once
 
 
 // Inference and optimization
@@ -34,24 +32,15 @@ namespace gtsam {
 
 
 
-
-
-
-class GTSAM_SelfCalibration {
+template < typename CALIBRATION, typename LENSDISTORT,  template<typename, typename> class DIST_CALIB_PROJ_FACTOR >
+class SelfCalibrationWrapper {
 
   public:
 
-    /** GTSAM */
-    typedef gtsam::Cal3_f camera_model;
+    typedef CALIBRATION CALIBRATION_MODEL;
+    typedef LENSDISTORT LENSDISTORT_MODEL;
 
-    // typedef gtsam::LensDistortDivisionModel lens_dist_model; 
-    // typedef gtsam::LensDistortFieldOfViewModel lens_dist_model;
-
-    typedef gtsam::LensDistortRadialFirstOrder lens_dist_model;
-    
-    typedef gtsam::UncalibratedProjectionFactor<camera_model> factor_cal_proj;
-    // typedef gtsam::UncalibratedProjectionDistortedImageFactor<camera_model, lens_dist_model> factor_cal_proj_dist;
-    typedef gtsam::DistortedUncalibratedProjectionFactor<camera_model, lens_dist_model> factor_cal_proj_dist;
+    typedef DIST_CALIB_PROJ_FACTOR<CALIBRATION, LENSDISTORT> SelfCalibrationFactor;
 
     typedef gtsam::NonlinearFactorGraph FactorGraph;
     typedef gtsam::LevenbergMarquardtOptimizer optimizer;
@@ -76,13 +65,13 @@ class GTSAM_SelfCalibration {
 
   public:
 
-    GTSAM_SelfCalibration() : graph() {}
+    SelfCalibrationWrapper() : graph() {}
 
     void add_keypoints_2d (size_t ith_pose, size_t jth_landmark, gtsam::Point2 & img_kpts, double sigma = 1.0) {
       /** image noise */
       auto img_noise = gtsam::noiseModel::Isotropic::Sigma(2, sigma);
       /** add factor and its measurement */
-      graph.emplace_shared<factor_cal_proj_dist>(
+      graph.emplace_shared<SelfCalibrationFactor>(
           img_kpts,
           img_noise,
           gtsam::Symbol('x', ith_pose),
@@ -90,13 +79,6 @@ class GTSAM_SelfCalibration {
           gtsam::Symbol('K', 0),
           gtsam::Symbol('D', 0)
           );
-      // graph.emplace_shared<factor_cal_proj>(
-      //     img_kpts,
-      //     img_noise,
-      //     gtsam::Symbol('x', ith_pose),
-      //     gtsam::Symbol('l', jth_landmark),
-      //     gtsam::Symbol('K', 0)
-      //     );
     }
     
   
@@ -107,7 +89,7 @@ class GTSAM_SelfCalibration {
     }
 
     /** calibration prior. Don't see a reason to use this */
-    void addCalibrationPrior (camera_model & K){
+    void addCalibrationPrior (CALIBRATION & K){
         auto calNoise = noiseModel::Diagonal::Sigmas((Vector(1) << 500).finished());
         graph.addPrior(Symbol('K', 0), K, calNoise);
     }
@@ -118,7 +100,7 @@ class GTSAM_SelfCalibration {
     }
 
     /** the parameters of the input will be optimiszed */
-    void optimize_from (camera_model & K, lens_dist_model & dist, std::vector<gtsam::Pose3> & poses, std::vector<gtsam::Point3> & landmarks_3d) {
+    void optimize_from (CALIBRATION & K, LENSDISTORT & dist, std::vector<gtsam::Pose3> & poses, std::vector<gtsam::Point3> & landmarks_3d) {
     // void optimize_from (camera_model & K, std::vector<gtsam::Pose3> & poses, std::vector<gtsam::Point3> & landmarks_3d) {
 
       gtsam::Values initialEstimate;
@@ -149,8 +131,8 @@ class GTSAM_SelfCalibration {
       std::cout << "final error=" <<graph.error(result)<< std::endl;
 
       /** obtain the optimised value for each variable */
-      gtsam::Matrix3 opt_K = result.at(gtsam::Symbol('K', 0)).cast<camera_model>().K();
-      gtsam::Vector1 opt_dist = result.at(gtsam::Symbol('D', 0)).cast<lens_dist_model>().vector();
+      gtsam::Matrix3 opt_K = result.at(gtsam::Symbol('K', 0)).cast<CALIBRATION>().K();
+      gtsam::Vector1 opt_dist = result.at(gtsam::Symbol('D', 0)).cast<LENSDISTORT>().vector();
       gtsam::Matrix4 opt_pose1 = result.at(gtsam::Symbol('x', 0)).cast<gtsam::Pose3>().matrix();
       gtsam::Matrix4 opt_pose2 = result.at(gtsam::Symbol('x', 1)).cast<gtsam::Pose3>().matrix();
 
@@ -165,4 +147,22 @@ class GTSAM_SelfCalibration {
 
 };
 
-}
+
+
+} // namespace
+
+
+
+
+namespace gtsam {
+
+  typedef gtsam::SelfCalibrationWrapper < gtsam::Cal3_f, gtsam::LensDistortFieldOfViewModel, gtsam::UncalibratedProjectionDistortedImageFactor> SelfCalibrationReverse;
+
+  typedef gtsam::SelfCalibrationWrapper < gtsam::Cal3_f, gtsam::LensDistortRadialFirstOrder, gtsam::DistortedUncalibratedProjectionFactor> SelfCalibrationForward;
+
+} // namespace
+
+
+
+
+
