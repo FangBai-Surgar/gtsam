@@ -53,12 +53,13 @@
 
 
 
+#ifdef GTSAM_ENABLE_BOOST_SERIALIZATION
 namespace boost {
 namespace serialization {
 class access;
 } /* namespace serialization */
 } /* namespace boost */
-
+#endif
 
 
 #include <gtsam/geometry/Cal3.h>
@@ -188,13 +189,14 @@ class GTSAM_EXPORT Cal3_f : public Cal3 {
 
  private:
   /// Serialization function
+  #ifdef GTSAM_ENABLE_BOOST_SERIALIZATION
   friend class boost::serialization::access;
   template <class Archive>
   void serialize(Archive& ar, const unsigned int /*version*/) {
     ar& boost::serialization::make_nvp(
         "Cal3_f", boost::serialization::base_object<Cal3>(*this));
   }
-
+  #endif
   /// @}
 };
 
@@ -229,6 +231,9 @@ public:
 
   enum { dimension = 1 };
 
+  typedef std::shared_ptr<LensDistortDivisionModel> shared_ptr;
+
+
   LensDistortDivisionModel () = default;
   LensDistortDivisionModel (double kappa) : gtsam::Vector1() { 
     (*this)[0] = kappa;
@@ -257,9 +262,9 @@ public:
   Point2 undistort (const Point2& centered_imgpts, OptionalJacobian<2, 1> minusDk = {}) const {
     double kappa = (*this)[0];
     double rr = centered_imgpts.squaredNorm();
-    double s = (1.0/(1.0 + kappa * kappa * rr));
+    double s = (1.0/(1.0 + kappa * rr));
     if (minusDk)
-      *minusDk =  s*s*(2*kappa*rr)*centered_imgpts;
+      *minusDk =  s*s*rr*centered_imgpts;
     return s*centered_imgpts;
   }
 
@@ -288,6 +293,196 @@ public:
 
 template <>
 struct traits<LensDistortDivisionModel>  : public internal::VectorSpace<LensDistortDivisionModel> {};
+
+
+} //namespace
+
+
+
+
+
+namespace gtsam {
+
+
+/**
+ * @remark every types in the Factor template must be defined on manifold
+ * @note a vector space belongs to Lie group, thus is well defined on manifold
+ */
+
+class LensDistortFieldOfViewModel : public gtsam::Vector1 {
+
+public:
+
+  enum { dimension = 1 };
+
+  typedef std::shared_ptr<LensDistortFieldOfViewModel> shared_ptr;
+
+
+  LensDistortFieldOfViewModel () = default;
+  LensDistortFieldOfViewModel (double kappa) : gtsam::Vector1() { 
+    (*this)[0] = kappa;
+  }
+  LensDistortFieldOfViewModel (const gtsam::Vector1 & cp) : gtsam::Vector1(cp) {}
+
+  double distDarams () const {double tmp = (*this)[0]; return tmp*tmp; }
+  void distParams (double val) { (*this)[0] = std::sqrt(val); }
+
+  friend std::ostream& operator<<(std::ostream& os, const LensDistortFieldOfViewModel& dist) {
+    // Use the base class version since it is identical.
+    os << (Vector1&)dist;
+    return os;
+  }
+
+  /// Required by Testable traits
+  void print(const std::string& s = "LensDistortFieldOfViewModel") const {
+    gtsam::print((Vector)*this, s);
+  }
+
+  bool equals(const LensDistortFieldOfViewModel& dist, double tol = 10e-9) const {
+    return gtsam::traits<gtsam::Vector1>::Equals(*this, dist, tol);
+  }
+
+  /** negDk: return the negative form of original Jacobian, as there is a minus before this function */
+  Point2 undistort (const Point2& centered_imgpts, OptionalJacobian<2, 1> minusDk = {}) const {
+    double kappa = (*this)[0];
+    double r = centered_imgpts.norm();
+    double tmp1 = std::tan(r*kappa);
+    double tmp2 = std::tan(kappa/2.0);
+    double c1 = std::cos(r*kappa);
+    double c2 = std::cos(kappa/2.0);
+    double s = 1.0/(2.0*tmp2*c1*c1) - tmp1/(4.0*r*tmp2*tmp2*c2*c2);
+    if (minusDk)
+      *minusDk =  -s*centered_imgpts;
+    return ( tmp1/(2.0*r*tmp2) ) * centered_imgpts;
+  }
+
+
+  /** vector space specification */
+  const gtsam::Vector1& vector() const { 
+    return *this; 
+  }
+  inline static LensDistortFieldOfViewModel Identity() {
+      return LensDistortFieldOfViewModel(0.0);
+  }
+  template <typename vector_like_t>
+  LensDistortFieldOfViewModel operator+(const vector_like_t& b) const {
+      LensDistortFieldOfViewModel a = *this;
+      a += b;
+      return a;
+  }
+  LensDistortFieldOfViewModel operator-(const LensDistortFieldOfViewModel& b) const
+  {
+      LensDistortFieldOfViewModel a = *this;
+      a -= b;
+      return a;
+  }
+
+};
+
+template <>
+struct traits<LensDistortFieldOfViewModel>  : public internal::VectorSpace<LensDistortFieldOfViewModel> {};
+
+
+} //namespace
+
+
+
+
+
+
+
+
+
+namespace gtsam {
+
+
+/**
+ * @remark every types in the Factor template must be defined on manifold
+ * @note a vector space belongs to Lie group, thus is well defined on manifold
+ */
+
+class LensDistortRadialFirstOrder : public gtsam::Vector1 {
+
+public:
+
+  enum { dimension = 1 };
+
+  typedef std::shared_ptr<LensDistortRadialFirstOrder> shared_ptr;
+
+
+  LensDistortRadialFirstOrder () = default;
+  LensDistortRadialFirstOrder (double kappa) : gtsam::Vector1() { 
+    (*this)[0] = kappa;
+  }
+  LensDistortRadialFirstOrder (const gtsam::Vector1 & cp) : gtsam::Vector1(cp) {}
+
+  double distDarams () const {double tmp = (*this)[0]; return tmp*tmp; }
+  void distParams (double val) { (*this)[0] = std::sqrt(val); }
+
+  friend std::ostream& operator<<(std::ostream& os, const LensDistortRadialFirstOrder& dist) {
+    // Use the base class version since it is identical.
+    os << (Vector1&)dist;
+    return os;
+  }
+
+  /// Required by Testable traits
+  void print(const std::string& s = "LensDistortRadialFirstOrder") const {
+    gtsam::print((Vector)*this, s);
+  }
+
+  bool equals(const LensDistortRadialFirstOrder& dist, double tol = 10e-9) const {
+    return gtsam::traits<gtsam::Vector1>::Equals(*this, dist, tol);
+  }
+
+
+  /** @brief Dp: Jacobian wrt centered projective point 
+   *         Dk: Jacobian wrt radial distortion parameter
+  */
+  Point2 distort (const Point2& centered_proj,
+                        OptionalJacobian<2, 6> Dpose,
+                        OptionalJacobian<2, 3> Dpoint,
+                        OptionalJacobian<2, 1> Dcal,
+                        OptionalJacobian<2, 1> Ddist) const {
+    double kappa = (*this)[0];
+    double rr = centered_proj.squaredNorm();
+    double s = 1.0 + kappa*rr;
+    gtsam::Matrix22 Dp = s*I_2x2 + 2.0*kappa*centered_proj*centered_proj.transpose();
+    if (Dpose)
+      *Dpose = Dp * (*Dpose);
+    if (Dpoint)
+      *Dpoint = Dp * (*Dpoint);
+    if (Dcal)
+      *Dcal = Dp * (*Dcal);
+    if (Ddist)
+      *Ddist = rr*centered_proj;
+    return s*centered_proj;
+  }
+
+
+  /** vector space specification */
+  const gtsam::Vector1& vector() const { 
+    return *this; 
+  }
+  inline static LensDistortRadialFirstOrder Identity() {
+      return LensDistortRadialFirstOrder(0.0);
+  }
+  template <typename vector_like_t>
+  LensDistortRadialFirstOrder operator+(const vector_like_t& b) const {
+      LensDistortRadialFirstOrder a = *this;
+      a += b;
+      return a;
+  }
+  LensDistortRadialFirstOrder operator-(const LensDistortRadialFirstOrder& b) const
+  {
+      LensDistortRadialFirstOrder a = *this;
+      a -= b;
+      return a;
+  }
+
+};
+
+template <>
+struct traits<LensDistortRadialFirstOrder>  : public internal::VectorSpace<LensDistortRadialFirstOrder> {};
 
 
 } //namespace

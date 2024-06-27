@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
 
   // calGraph.optimize_from(var_K, var_poses, var_points);
 
-  auto var_D = GTSAM_SelfCalibration::lens_dist_model(0.1);
+  auto var_D = GTSAM_SelfCalibration::lens_dist_model(100);
   calGraph.optimize_from(var_K, var_D, var_poses, var_points);
 
   return 0;

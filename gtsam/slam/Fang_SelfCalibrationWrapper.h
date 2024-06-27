@@ -33,17 +33,25 @@
 namespace gtsam {
 
 
+
+
+
+
 class GTSAM_SelfCalibration {
 
   public:
 
     /** GTSAM */
     typedef gtsam::Cal3_f camera_model;
-    typedef gtsam::LensDistortDivisionModel lens_dist_model;
+
+    // typedef gtsam::LensDistortDivisionModel lens_dist_model; 
+    // typedef gtsam::LensDistortFieldOfViewModel lens_dist_model;
+
+    typedef gtsam::LensDistortRadialFirstOrder lens_dist_model;
     
     typedef gtsam::UncalibratedProjectionFactor<camera_model> factor_cal_proj;
-    typedef gtsam::UncalibratedProjectionDistortedImageFactor<camera_model, lens_dist_model> factor_cal_proj_dist;
-
+    // typedef gtsam::UncalibratedProjectionDistortedImageFactor<camera_model, lens_dist_model> factor_cal_proj_dist;
+    typedef gtsam::DistortedUncalibratedProjectionFactor<camera_model, lens_dist_model> factor_cal_proj_dist;
 
     typedef gtsam::NonlinearFactorGraph FactorGraph;
     typedef gtsam::LevenbergMarquardtOptimizer optimizer;
@@ -139,8 +147,6 @@ class GTSAM_SelfCalibration {
       
       std::cout << "initial error=" <<graph.error(initialEstimate)<< std::endl;
       std::cout << "final error=" <<graph.error(result)<< std::endl;
-
-
 
       /** obtain the optimised value for each variable */
       gtsam::Matrix3 opt_K = result.at(gtsam::Symbol('K', 0)).cast<camera_model>().K();
