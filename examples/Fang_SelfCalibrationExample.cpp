@@ -49,8 +49,6 @@ std::vector<gtsam::Pose3> createPoses(
 
 
 
-typedef gtsam::SelfCalibrationForward FGO;
-// typedef gtsam::SelfCalibrationReverse FGO;
 
 
 int main(int argc, char* argv[]) {
@@ -64,9 +62,11 @@ int main(int argc, char* argv[]) {
   Cal3_f K(50.0, 50.0, 0.0, 50.0, 50.0);
 
 
+  typedef gtsam::SelfCalibrationForward FGO;
   FGO calGraph;
-
-
+  calGraph.verbose(true);
+   
+  /** add observations to 2d image key points */
   for (size_t i = 0; i < poses.size(); ++i) {
     for (size_t j = 0; j < points.size(); ++j) {
       PinholeCamera<FGO::CALIBRATION_MODEL> camera(poses[i], K);
@@ -77,32 +77,38 @@ int main(int argc, char* argv[]) {
   }
 
 
-  calGraph.addPosePrior(0, poses[0], 0.1, 0.3);
-  calGraph.addCalibrationPrior(K);
-  calGraph.addLandmarkPrior (0, points[0], 0.1);
-
-
   /** initial estimates */
-  auto var_K = FGO::CALIBRATION_MODEL(500.0, 500.0, 0.0, 50.0, 50.0);
-
-
-  auto var_poses = poses;
-  for (size_t i = 0; i < var_poses.size(); ++i) {
-    var_poses[i] = var_poses[i].compose(Pose3(Rot3::Rodrigues(-0.1, 0.2, 0.25),
-                                               Point3(0.05, -0.10, 0.20)));
+  std::vector<Eigen::Matrix4d> var_poses;
+  for (size_t i = 0; i < poses.size(); ++i) {
+  var_poses.push_back( poses[i].compose(Pose3(Rot3::Rodrigues(-0.1, 0.2, 0.25),
+                                            Point3(0.05, -0.10, 0.20))).matrix() );
   }
-   
-  auto var_points = points;
-  for (size_t j = 0; j < var_points.size(); ++j) {
-    var_points[j] = var_points[j] + Point3(-0.25, 0.20, 0.15);
+  var_poses[0] = poses[0].matrix();
+
+  std::vector<Eigen::Vector3d> var_points;
+  for (size_t j = 0; j < points.size(); ++j) {
+  var_points.push_back( points[j] + Point3(-0.25, 0.20, 0.15) );
   }
+  var_points[0] = points[0];
 
 
 
-  // calGraph.optimize_from(var_K, var_poses, var_points);
+  Eigen::Matrix3d var_K = K.K();
+  double new_focal = 567;
+  var_K(0, 0) = new_focal;
+  var_K(1, 1) = new_focal;
 
-  auto var_D = FGO::LENSDISTORT_MODEL(0.01);
+  Eigen::VectorXd var_D = FGO::LENSDISTORT_MODEL(1.234).vector();
+
+
+  std::cout << " -------------- data generated ------------------ " << "\n";
+
+
+  /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
   calGraph.optimize_from(var_K, var_D, var_poses, var_points);
+
+
+  std::cout << " -------------- variables optimized ------------------ " << "\n";
 
   return 0;
 }

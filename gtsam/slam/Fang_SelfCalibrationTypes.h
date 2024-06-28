@@ -106,6 +106,10 @@ class GTSAM_EXPORT Cal3_f : public Cal3 {
   /// constructor from vector
   Cal3_f(const Vector5& d) : Cal3(d) {}
 
+  /// constructor from matrix
+  Cal3_f(const Matrix33& m) : Cal3(m(0,0), m(1,1), m(0,1), m(0,2), m(1,2)) {}
+  
+
   /**
    * Easy constructor, takes fov in degrees, asssumes zero skew, unit aspect
    * @param fov field of view in degrees
