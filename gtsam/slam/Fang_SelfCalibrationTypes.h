@@ -45,6 +45,132 @@ class access;
 #endif
 
 
+
+
+
+
+
+
+
+namespace gtsam {
+
+class GTSAM_EXPORT Cal_fd {
+
+private:
+
+  double f_;
+  double kappa_;
+  double u0_;
+  double v0_;
+
+
+public:
+
+  enum { dimension = 2 };
+
+  typedef std::shared_ptr<Cal_fd> shared_ptr;
+
+public:
+
+  Cal_fd (double f, double kappa, double u0, double v0) :
+          f_(f), kappa_(kappa), u0_(u0), v0_(v0) {}
+
+
+  Point2 uncalibrate(const Point2& p, OptionalJacobian<2, 2> Dcal = {}, OptionalJacobian<2, 2> Dp = {}) const {                       
+
+    const double x = p.x(), y = p.y();
+    const double rr = x*x + y*y;
+    const double c = 1.0 + kappa_*rr;
+
+    /** d_focal,  d_kappa */
+    if (Dcal) *Dcal << c*x, f_*rr*x,
+                       c*y, f_*rr*y;
+
+    double fk = f_*kappa_;
+
+    if (Dp) *Dp << 2*fk*x*x + f_*c,   2*fk*x*y,
+                   2*fk*y*x,         2*fk*y*y + f_*c;
+
+    return Point2(f_*c*x + u0_, f_*c*y + v0_);
+
+  }
+
+
+  /// @}
+  /// @name Manifold
+  /// @{
+
+  /// return DOF, dimensionality of tangent space
+  inline static size_t Dim() { return dimension; }
+
+  /// Given 2-dim tangent vector, create new calibration
+  inline Cal_fd retract(const Vector2 & d) const {
+    return Cal_fd(f_ + d(0), kappa_ + d(1), u0_, v0_);
+  }
+
+  Vector4 vector() const {
+    Vector4 v;
+    v << f_, kappa_, u0_, v0_;
+    return v;
+  }
+
+  /// Unretraction for the calibration
+  Vector2 localCoordinates(const Cal_fd& T2) const {
+    const Vector4 tmp = T2.vector() - this->vector();
+    return Vector2(tmp(0), tmp(1));
+  }
+
+
+  /// Output stream operator
+  GTSAM_EXPORT friend std::ostream& operator<<(std::ostream& os,
+                                               const Cal_fd& cal) {
+    os << "focal: " << cal.f_ << ", kappa: " << cal.kappa_ 
+       << ", u0: " << cal.u0_ << ", v0: " << cal.v0_;
+    return os;
+  }
+
+  /// print with optional string
+  void print(const std::string& s = "Cal_fd") const {
+    gtsam::print((Vector)vector(), s);
+  }
+
+  /// Check if equal up to specified tolerance
+  bool equals(const Cal_fd& K, double tol = 10e-9) const {
+    return ( std::fabs(f_ - K.f_) < tol && 
+             std::fabs(kappa_ - K.kappa_) < tol && 
+             std::fabs(u0_ - K.u0_) < tol &&
+             std::fabs(v0_ - K.v0_) < tol );
+  }
+
+};
+
+
+template <>
+struct traits<Cal_fd> : public internal::Manifold<Cal_fd> {};
+
+template <>
+struct traits<const Cal_fd> : public internal::Manifold<Cal_fd> {};
+
+}  // namespace gtsam
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #include <gtsam/geometry/Cal3.h>
 
 
@@ -426,22 +552,24 @@ public:
    *         Dk: Jacobian wrt radial distortion parameter
   */
   Point2 distort (const Point2& centered_proj,
-                        OptionalJacobian<2, 6> Dpose,
-                        OptionalJacobian<2, 3> Dpoint,
-                        OptionalJacobian<2, 1> Dcal,
-                        OptionalJacobian<2, 1> Ddist) const {
+                        OptionalJacobian<2, 6> Dpose = {},
+                        OptionalJacobian<2, 3> Dpoint = {},
+                        OptionalJacobian<2, 1> Dcal = {},
+                        OptionalJacobian<2, 1> Ddist = {}) const {
     double kappa = (*this)[0];
     double rr = centered_proj.squaredNorm();
     double s = 1.0 + kappa*rr;
-    gtsam::Matrix22 Dp = s*I_2x2 + 2.0*kappa*centered_proj*centered_proj.transpose();
-    if (Dpose)
-      *Dpose = Dp * (*Dpose);
-    if (Dpoint)
-      *Dpoint = Dp * (*Dpoint);
-    if (Dcal)
-      *Dcal = Dp * (*Dcal);
-    if (Ddist)
-      *Ddist = rr*centered_proj;
+    if (Dpose || Dpoint || Dcal || Ddist) {
+      gtsam::Matrix22 Dp = s*I_2x2 + 2.0*kappa*centered_proj*centered_proj.transpose();
+      if (Dpose)
+        *Dpose = Dp * (*Dpose);
+      if (Dpoint)
+        *Dpoint = Dp * (*Dpoint);
+      if (Dcal)
+        *Dcal = Dp * (*Dcal);
+      if (Ddist)
+        *Ddist = rr*centered_proj;
+    }
     return s*centered_proj;
   }
 
