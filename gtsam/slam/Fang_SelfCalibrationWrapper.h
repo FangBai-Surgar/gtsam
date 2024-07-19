@@ -77,11 +77,72 @@ class SelfCalibrationWrapper {
     /** @brief A unified interface function for SURGAR 
      * @brief After optimization, this function updates the values passed through the function arguments.
     */
+
+
+
+    void optimize_from_3view (double & focal, double & kappa, double & u0, double & v0,
+                              Eigen::Matrix4d pose1, Eigen::Matrix4d pose2, Eigen::Matrix4d pose3, 
+                              Eigen::Matrix<double, Eigen::Dynamic, 3> & landmarks_3d) {
+
+      std::vector<Eigen::Matrix4d> poses;
+
+      poses.push_back(pose1); poses.push_back(pose2); poses.push_back(pose3);
+
+      this->optimize_from (focal, kappa, u0, v0, poses, landmarks_3d);
+
+      pose1 = poses[0]; pose2 = poses[1]; pose3 = poses[2];
+
+      Eigen::MatrixX3d a;
+
+    }
+
+
+
+    void optimize_from_2view (double & focal, double & kappa, double & u0, double & v0,
+                              Eigen::Matrix4d pose1, Eigen::Matrix4d pose2, 
+                              Eigen::Matrix<double, Eigen::Dynamic, 3> & landmarks_3d) {
+
+      std::vector<Eigen::Matrix4d> poses;
+
+      poses.push_back(pose1); poses.push_back(pose2);
+
+      this->optimize_from (focal, kappa, u0, v0, poses, landmarks_3d);
+
+      pose1 = poses[0]; pose2 = poses[1];
+
+      Eigen::MatrixX3d a;
+
+    }
+
+
+
     void optimize_from (double & focal, double & kappa, double & u0, double & v0,
                         std::vector<Eigen::Matrix4d> & poses, std::vector<Eigen::Vector3d> & landmarks_3d) {
 
+      Eigen::Matrix<double, Eigen::Dynamic, 3> mat_landmarks_3d;
+      mat_landmarks_3d.resize(landmarks_3d.size(), 3);
+
+      for (size_t j = 0; j < landmarks_3d.size(); ++j) {
+          auto & lmk = landmarks_3d[j];
+          mat_landmarks_3d.row(j) <<  lmk(0), lmk(1), lmk(2);
+      }
+
+      this->optimize_from (focal, kappa, u0, v0, poses, mat_landmarks_3d);
+
+      for (size_t j = 0; j < landmarks_3d.size(); ++j) {
+          const auto & lmk = mat_landmarks_3d.row(j);
+          landmarks_3d[j] = Eigen::Vector3d(lmk(0), lmk(1), lmk(2));
+      }
+    }
+
+
+    void optimize_from (double & focal, double & kappa, double & u0, double & v0,
+                        std::vector<Eigen::Matrix4d> & poses,
+                        Eigen::Matrix<double, Eigen::Dynamic, 3> & landmarks_3d) {
+
       this->addPosePrior(0, gtsam::Pose3(poses[0]), 0.001, 0.003);
-      this->addLandmarkPrior (0, landmarks_3d[0], 0.1);
+      const auto & lmk0 = landmarks_3d.row(0);
+      this->addLandmarkPrior (0, gtsam::Point3(lmk0(0), lmk0(1), lmk0(2)), 0.1);
 
       gtsam::Values initialEstimate;
 
@@ -90,8 +151,9 @@ class SelfCalibrationWrapper {
       for (size_t i = 0; i < poses.size(); ++i) {
         initialEstimate.insert(gtsam::Symbol('x', i), gtsam::Pose3(poses[i]));
       }
-      for (size_t j = 0; j < landmarks_3d.size(); ++j) {
-        initialEstimate.insert(gtsam::Symbol('l', j), landmarks_3d[j]);
+      for (int j = 0; j < landmarks_3d.rows(); ++j) {
+        const auto & lmk = landmarks_3d.row(j);
+        initialEstimate.insert(gtsam::Symbol('l', j), gtsam::Point3(lmk(0), lmk(1), lmk(2)));
       }
 
       /* Optimize the graph and print results */
@@ -106,7 +168,8 @@ class SelfCalibrationWrapper {
         poses[index(pair.first)] = pair.second.matrix();
       }
       for (const auto &pair : result.extract<gtsam::Point3>()) {
-        landmarks_3d[index(pair.first)] = pair.second;
+        const gtsam::Point3 & pt = pair.second;
+        landmarks_3d.row(index(pair.first)) << pt(0), pt(1), pt(2);
       }
 
       if (verbose_) {
@@ -120,6 +183,10 @@ class SelfCalibrationWrapper {
 
     }
 
+
+
+
+
     void verbose (bool val = true) { verbose_ = val; }
 
 
@@ -132,13 +199,13 @@ protected:
     }
 
     /** landmark prior: to remove the global scale ambiguitiey */
-    void addLandmarkPrior (size_t jth_landmark, gtsam::Point3 & landmark_3d, double sigma = 0.1) {
+    void addLandmarkPrior (size_t jth_landmark, gtsam::Point3 landmark_3d, double sigma = 0.1) {
       auto pointNoise = noiseModel::Isotropic::Sigma(3, sigma);
       graph.addPrior(Symbol('l', jth_landmark), landmark_3d, pointNoise);
     }
 
     /** calibration prior. Don't see a reason to use this */
-    void addCalibrationPrior (CALIBRATION & K){
+    void addCalibrationPrior (CALIBRATION K){
         auto calNoise = noiseModel::Diagonal::Sigmas((Vector(1) << 500).finished());
         graph.addPrior(Symbol('K', 0), K, calNoise);
     }
