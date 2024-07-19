@@ -59,7 +59,13 @@ int main(int argc, char* argv[]) {
   vector<Pose3> poses = createPoses();
 
   // Simulated measurements from each camera pose, adding them to the factor graph
-  Cal3_f K(50.0, 50.0, 0.0, 50.0, 50.0);
+  double gt_focal = 50;
+  double gt_kappa = 0.001;
+  double gt_u0 = 50;
+  double gt_v0 = 50;
+
+  gtsam::Cal_fd K(gt_focal, gt_kappa, gt_u0, gt_v0);
+
 
 
   typedef gtsam::SelfCalibrationForward FGO;
@@ -92,25 +98,84 @@ int main(int argc, char* argv[]) {
   var_points[0] = points[0];
 
 
-
-  Eigen::Matrix3d var_K = K.K();
-  double new_focal = 567;
-  var_K(0, 0) = new_focal;
-  var_K(1, 1) = new_focal;
-
-  Eigen::VectorXd var_D = FGO::LENSDISTORT_MODEL(1.234).vector();
+  double var_u0 = gt_u0;
+  double var_v0 = gt_v0;
 
 
-  std::cout << " -------------- data generated ------------------ " << "\n";
+  std::cout << "\n" << " -------------- ground truth ------------------ " << "\n";
+  printf ("focal: %f,  kappa: %f,   u0: %f,   v0: %f \n ", gt_focal, gt_kappa, gt_u0, gt_v0);
+
+  std::cout << "\n";
 
 
+
+  double var_focal = 200;
+  double var_kappa = 0.1;
   /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
-  calGraph.optimize_from(var_K, var_D, var_poses, var_points);
+  calGraph.optimize_from(var_focal, var_kappa, var_u0, var_v0, var_poses, var_points);
+
+  std::cout << "\n";
+  std::cout << "Assume we have rather accurate (from optimization) pose and landmark estimates.\n";
+
+  var_focal = 200;
+  var_kappa = 0.0;
+  /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
+  calGraph.optimize_from(var_focal, var_kappa, var_u0, var_v0, var_poses, var_points);
+
+  std::cout << "\n";
 
 
-  std::cout << " -------------- variables optimized ------------------ " << "\n";
+
+  var_focal = 80;
+  var_kappa = 0.0;
+  /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
+  calGraph.optimize_from(var_focal, var_kappa, var_u0, var_v0, var_poses, var_points);
+
+  std::cout << "\n";
+
+
+
+
+  var_focal = 800;
+  var_kappa = 0.001;
+  /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
+  calGraph.optimize_from(var_focal, var_kappa, var_u0, var_v0, var_poses, var_points);
+
+  std::cout << "\n";
+
+
+
+  var_focal = 800;
+  var_kappa = 0.0;
+  /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
+  calGraph.optimize_from(var_focal, var_kappa, var_u0, var_v0, var_poses, var_points);
+
+  std::cout << "\n";
+
+
+
+  var_focal = 800;
+  var_kappa = 1.0;
+  /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
+  calGraph.optimize_from(var_focal, var_kappa, var_u0, var_v0, var_poses, var_points);
+
+  std::cout << "\n";
+
+
+
+  var_focal = 800;
+  var_kappa = -1.0;
+  /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
+  calGraph.optimize_from(var_focal, var_kappa, var_u0, var_v0, var_poses, var_points);
+
+  std::cout << "\n";
+
+
+
+
 
   return 0;
+
 }
 
 

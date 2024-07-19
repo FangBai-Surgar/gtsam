@@ -75,7 +75,7 @@ public:
   Cal_fd (double f, double kappa, double u0, double v0) :
           f_(f), kappa_(kappa), u0_(u0), v0_(v0) {}
 
-
+  /**@brief: called by PinholePose.h, line 90 */
   Point2 uncalibrate(const Point2& p, OptionalJacobian<2, 2> Dcal = {}, OptionalJacobian<2, 2> Dp = {}) const {                       
 
     const double x = p.x(), y = p.y();
@@ -141,6 +141,12 @@ public:
              std::fabs(u0_ - K.u0_) < tol &&
              std::fabs(v0_ - K.v0_) < tol );
   }
+
+
+  double focal () const { return f_;}
+  double kappa () const { return kappa_;}
+  double u0() const {return u0_;}
+  double v0() const {return v0_;}
 
 };
 
