@@ -61,7 +61,7 @@ class SelfCalibrationWrapper {
 
     SelfCalibrationWrapper() : graph(), verbose_(false) {}
 
-    void add_keypoints_2d (size_t ith_pose, size_t jth_landmark, gtsam::Point2 & img_kpts, double sigma = 1.0) {
+    void add_keypoints_2d (int ith_pose, int jth_landmark, const gtsam::Point2 & img_kpts, double sigma = 1.0) {
       /** image noise */
       auto img_noise = gtsam::noiseModel::Isotropic::Sigma(2, sigma);
       /** add factor and its measurement */
