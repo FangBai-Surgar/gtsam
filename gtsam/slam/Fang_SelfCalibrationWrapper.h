@@ -79,10 +79,10 @@ class SelfCalibrationWrapper {
     */
 
 
-
+    template <typename Landmark3DArrayType>
     void optimize_from_3view (double & focal, double & kappa, double & u0, double & v0,
-                              Eigen::Matrix4d pose1, Eigen::Matrix4d pose2, Eigen::Matrix4d pose3, 
-                              Eigen::Matrix<double, Eigen::Dynamic, 3> & landmarks_3d) {
+                              Eigen::Matrix4d & pose1, Eigen::Matrix4d & pose2, Eigen::Matrix4d & pose3, 
+                              Landmark3DArrayType & landmarks_3d) {
 
       std::vector<Eigen::Matrix4d> poses;
 
@@ -92,15 +92,14 @@ class SelfCalibrationWrapper {
 
       pose1 = poses[0]; pose2 = poses[1]; pose3 = poses[2];
 
-      Eigen::MatrixX3d a;
-
     }
 
 
 
+    template <typename Landmark3DArrayType>
     void optimize_from_2view (double & focal, double & kappa, double & u0, double & v0,
-                              Eigen::Matrix4d pose1, Eigen::Matrix4d pose2, 
-                              Eigen::Matrix<double, Eigen::Dynamic, 3> & landmarks_3d) {
+                              Eigen::Matrix4d & pose1, Eigen::Matrix4d & pose2, 
+                              Landmark3DArrayType & landmarks_3d) {
 
       std::vector<Eigen::Matrix4d> poses;
 
@@ -109,8 +108,6 @@ class SelfCalibrationWrapper {
       this->optimize_from (focal, kappa, u0, v0, poses, landmarks_3d);
 
       pose1 = poses[0]; pose2 = poses[1];
-
-      Eigen::MatrixX3d a;
 
     }
 
@@ -144,7 +141,7 @@ class SelfCalibrationWrapper {
       const auto & lmk0 = landmarks_3d.row(0);
       this->addLandmarkPrior (0, gtsam::Point3(lmk0(0), lmk0(1), lmk0(2)), 0.1);
 
-      gtsam::Values initialEstimate;
+      gtsam::Values initialEstimate;        
 
       initialEstimate.insert(gtsam::Symbol('K', 0), CALIBRATION(focal, kappa, u0, v0));
 
@@ -156,9 +153,18 @@ class SelfCalibrationWrapper {
         initialEstimate.insert(gtsam::Symbol('l', j), gtsam::Point3(lmk(0), lmk(1), lmk(2)));
       }
 
+      if (0&&verbose_) {
+        graph.print("\nFactor Graph:\n");
+        initialEstimate.print("\nInitial Values:\n");
+      }
+
       /* Optimize the graph and print results */
       gtsam::Values result = optimizer(graph, initialEstimate).optimize();
-      
+
+      if (0&&verbose_) {
+        result.print("\nFinal Result:\n");
+      }
+
       /** obtain the optimised value for each variable */
       auto calib = result.at(gtsam::Symbol('K', 0)).cast<CALIBRATION>();
       focal = calib.focal(); kappa = calib.kappa(); u0 = calib.u0(); v0 = calib.v0();
@@ -171,6 +177,8 @@ class SelfCalibrationWrapper {
         const gtsam::Point3 & pt = pair.second;
         landmarks_3d.row(index(pair.first)) << pt(0), pt(1), pt(2);
       }
+
+
 
       if (verbose_) {
         std::cout << " -------------- Calibration K ------------------ " << "\n";
