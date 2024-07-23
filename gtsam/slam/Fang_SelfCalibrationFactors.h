@@ -37,19 +37,97 @@
 
 
 
-/**
- * 
- * @brief a general SFM factor with an unknown calibration. 
- * code modified from factor GeneralSFMFactor2 in "gtsam/slam/GeneralSFMFactor.h", originally implemented by Kai Ni
- * 
- * minimise \sum_j || proj (K[R_j X + t_j]) - img_pts || over (K, R_j, t_j, X)
- * 
- * The projective factor where the calibration matrix is optimisable.
- * There is no need to modify anything of this class when implementing your customized calibration method.
- * 
- */
+
+
+
 
 namespace gtsam {
+
+
+
+
+/**
+ * @brief A factor to constrain the relative distance of two points in 3D
+ */
+class RelativePointDistanceFactor: public NoiseModelFactorN<Point3, Point3> {
+
+protected:
+
+  double measured_;
+
+
+public:
+
+  typedef RelativePointDistanceFactor This;
+  typedef NoiseModelFactorN<Point3, Point3> Base;///< typedef for the base class
+
+  // shorthand for a smart pointer to a factor
+  typedef std::shared_ptr<This> shared_ptr;
+
+
+  RelativePointDistanceFactor(double measured, const SharedNoiseModel& model, Key landmarkKey1, Key landmarkKey2) :
+    Base(model, landmarkKey1, landmarkKey2), measured_(measured) {}
+  RelativePointDistanceFactor():measured_(0.0) {} ///< default constructor
+
+  ~RelativePointDistanceFactor() override {} ///< destructor
+
+
+  /// @return a deep copy of this factor
+  gtsam::NonlinearFactor::shared_ptr clone() const override {
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
+        gtsam::NonlinearFactor::shared_ptr(new This(*this)));}
+
+  /**
+   * print
+   * @param s optional string naming the factor
+   * @param keyFormatter optional formatter useful for printing Symbols
+   */
+  void print(const std::string& s = "RelativePointDistanceFactor", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override {
+    Base::print(s, keyFormatter);
+    std::cout << (s.empty() ? s : s + " ") << measured_ << std::endl;
+  }
+
+  /**
+   * equals
+   */
+  bool equals(const NonlinearFactor &p, double tol = 1e-9) const override {
+    const This* e = dynamic_cast<const This*>(&p);
+    return e && Base::equals(p, tol) && std::abs(this->measured_ -  e->measured_) <  tol;
+  }
+
+  /** h(x)-z */
+  Vector evaluateError(const Point3& lmk1, const Point3& lmk2,
+                       OptionalMatrixType H1, OptionalMatrixType H2) const override
+  {
+    try {
+      return gtsam::Vector1 ( gtsam::distance3(lmk1, lmk2, H1, H2) - measured_ );
+    }
+    catch( CheiralityException& e) {
+      if (H1) *H1 = Matrix::Zero(1, 3);
+      if (H2) *H2 = Matrix::Zero(1, 3);
+      std::cout << e.what() << ": Relative distance between Landmark "<< DefaultKeyFormatter(this->key1())
+                            << " and Landmark " << DefaultKeyFormatter(this->key2()) << " cannot be evaluated." << std::endl;
+    }
+    return Vector1(0);
+  }
+
+  /** return the measured */
+  inline double measured() const {
+    return measured_;
+  }
+
+
+};
+
+template<>
+struct traits<RelativePointDistanceFactor> : Testable< RelativePointDistanceFactor > {};
+
+
+
+
+
+
+
 /**
  * Non-linear factor for a constraint derived from a 2D measurement.
  * Compared to GeneralSFMFactor, it is a ternary-factor because the calibration is isolated from camera..
@@ -161,6 +239,10 @@ struct traits<UncalibratedProjectionFactor<CALIBRATION> > : Testable<
 
 
 
+
+
+
+#ifdef SURGAR_SELFCALIBRATION_TEST_FANG
 
 
 /**
@@ -424,4 +506,4 @@ struct traits< DistortedUncalibratedProjectionFactor<CALIBRATION, LENSDISTORT> >
 } //namespace
 
 
-
+#endif

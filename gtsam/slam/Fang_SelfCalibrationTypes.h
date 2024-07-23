@@ -172,6 +172,7 @@ struct traits<const Cal_fd> : public internal::Manifold<Cal_fd> {};
 
 
 
+#ifdef SURGAR_SELFCALIBRATION_TEST_FANG
 
 
 
@@ -610,3 +611,4 @@ struct traits<LensDistortRadialFirstOrder>  : public internal::VectorSpace<LensD
 
 
 
+#endif
