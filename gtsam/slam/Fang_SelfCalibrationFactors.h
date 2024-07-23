@@ -46,6 +46,199 @@ namespace gtsam {
 
 
 
+
+
+
+
+
+
+
+
+/**
+ * @brief A factor to constrain the relative distance of two points in 3D
+ */
+class RelativePoseTranslationDistanceFactor: public NoiseModelFactorN<Pose3, Pose3> {
+
+protected:
+
+  double measured_;
+
+
+public:
+
+  typedef RelativePoseTranslationDistanceFactor This;
+  typedef NoiseModelFactorN<Pose3, Pose3> Base;///< typedef for the base class
+
+  // shorthand for a smart pointer to a factor
+  typedef std::shared_ptr<This> shared_ptr;
+
+
+  RelativePoseTranslationDistanceFactor(double measured, const SharedNoiseModel& model, Key poseKey1, Key poseKey2) :
+    Base(model, poseKey1, poseKey2), measured_(measured) {}
+  RelativePoseTranslationDistanceFactor():measured_(0.0) {} ///< default constructor
+
+  ~RelativePoseTranslationDistanceFactor() override {} ///< destructor
+
+
+  /// @return a deep copy of this factor
+  gtsam::NonlinearFactor::shared_ptr clone() const override {
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
+        gtsam::NonlinearFactor::shared_ptr(new This(*this)));}
+
+  /**
+   * print
+   * @param s optional string naming the factor
+   * @param keyFormatter optional formatter useful for printing Symbols
+   */
+  void print(const std::string& s = "RelativePoseTranslationDistanceFactor", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override {
+    Base::print(s, keyFormatter);
+    std::cout << (s.empty() ? s : s + " ") << measured_ << std::endl;
+  }
+
+  /**
+   * equals
+   */
+  bool equals(const NonlinearFactor &p, double tol = 1e-9) const override {
+    const This* e = dynamic_cast<const This*>(&p);
+    return e && Base::equals(p, tol) && std::abs(this->measured_ -  e->measured_) <  tol;
+  }
+
+  /** h(x)-z */
+  double costFuncHelper (const Pose3& pose1, const Pose3& pose2,
+                       OptionalJacobian<1, 6> H1, OptionalJacobian<1, 6> H2) const {
+
+      const Point3&  t1 = pose1.translation();
+      const Point3&  t2 = pose2.translation();
+
+      Point3 dt = t1 - t2;
+      double d = dt.norm();
+
+      dt = dt * (1.0 / d);
+
+      if (H1) {
+          *H1 << 0.0, 0.0, 0.0,   dt(0),  dt(1),  dt(2);
+      }       
+      if (H2) {
+          *H2 << 0.0, 0.0, 0.0,  -dt(0), -dt(1), -dt(2);
+      }
+
+      return d;
+  }
+
+  Vector evaluateError(const Pose3& pose1, const Pose3& pose2,
+                        OptionalMatrixType H1, OptionalMatrixType H2) const override
+  {
+    try {
+      return Vector1 ( costFuncHelper(pose1, pose2, H1, H2) - measured_);
+    }
+    catch( CheiralityException& e) {
+      if (H1) *H1 = Matrix::Zero(1, 6);
+      if (H2) *H2 = Matrix::Zero(1, 6);
+      std::cout << e.what() << ": Relative distance between Pose "<< DefaultKeyFormatter(this->key1())
+                            << " and Pose " << DefaultKeyFormatter(this->key2()) << " cannot be evaluated." << std::endl;
+    }
+    return Vector1(0);
+  }
+
+  /** return the measured */
+  inline double measured() const {
+    return measured_;
+  }
+
+
+};
+
+template<>
+struct traits<RelativePoseTranslationDistanceFactor> : Testable< RelativePoseTranslationDistanceFactor > {};
+
+
+
+
+
+
+
+
+
+/**
+ * @brief A factor to constrain the relative distance of two points in 3D
+ */
+class Point3NormFactor: public NoiseModelFactorN<Point3> {
+
+protected:
+
+  double measured_;
+
+
+public:
+
+  typedef Point3NormFactor This;
+  typedef NoiseModelFactorN<Point3> Base;///< typedef for the base class
+
+  // shorthand for a smart pointer to a factor
+  typedef std::shared_ptr<This> shared_ptr;
+
+
+  Point3NormFactor(double measured, const SharedNoiseModel& model, Key landmarkKey) :
+    Base(model, landmarkKey), measured_(measured) {}
+  Point3NormFactor():measured_(0.0) {} ///< default constructor
+
+  ~Point3NormFactor() override {} ///< destructor
+
+
+  /// @return a deep copy of this factor
+  gtsam::NonlinearFactor::shared_ptr clone() const override {
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
+        gtsam::NonlinearFactor::shared_ptr(new This(*this)));}
+
+  /**
+   * print
+   * @param s optional string naming the factor
+   * @param keyFormatter optional formatter useful for printing Symbols
+   */
+  void print(const std::string& s = "Point3NormFactor", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override {
+    Base::print(s, keyFormatter);
+    std::cout << (s.empty() ? s : s + " ") << measured_ << std::endl;
+  }
+
+  /**
+   * equals
+   */
+  bool equals(const NonlinearFactor &p, double tol = 1e-9) const override {
+    const This* e = dynamic_cast<const This*>(&p);
+    return e && Base::equals(p, tol) && std::abs(this->measured_ -  e->measured_) <  tol;
+  }
+
+  /** h(x)-z */
+  Vector evaluateError(const Point3& lmk, OptionalMatrixType H1) const override
+  {
+    try {
+      return gtsam::Vector1 ( gtsam::norm3(lmk, H1) - measured_ );
+    }
+    catch( CheiralityException& e) {
+      if (H1) *H1 = Matrix::Zero(1, 3);
+      std::cout << e.what() << ": Landmark "<< DefaultKeyFormatter(this->key1())
+                            <<" norm cannot be evaluated." << std::endl;
+    }
+    return Vector1(0);
+  }
+
+  /** return the measured */
+  inline double measured() const {
+    return measured_;
+  }
+
+
+};
+
+template<>
+struct traits<Point3NormFactor> : Testable< Point3NormFactor > {};
+
+
+
+
+
+
+
 /**
  * @brief A factor to constrain the relative distance of two points in 3D
  */
@@ -100,6 +293,7 @@ public:
                        OptionalMatrixType H1, OptionalMatrixType H2) const override
   {
     try {
+      // std::cout<<"H1 in Factor = " << H1 << std::endl;      
       return gtsam::Vector1 ( gtsam::distance3(lmk1, lmk2, H1, H2) - measured_ );
     }
     catch( CheiralityException& e) {

@@ -48,8 +48,12 @@ class SelfCalibrationWrapper {
     typedef DIST_CALIB_PROJ_FACTOR<CALIBRATION> SelfCalibrationFactor;
 
     typedef gtsam::NonlinearFactorGraph FactorGraph;
+
     typedef gtsam::DoglegOptimizer optimizer;
 
+    // typedef gtsam::GaussNewtonOptimizer optimizer;
+
+    // typedef gtsam::LevenbergMarquardtOptimizer optimizer; 
 
   protected:
 
@@ -142,16 +146,43 @@ class SelfCalibrationWrapper {
       this->addPosePrior(0, gtsam::Pose3(poses[0]), 0.001, 0.003);
       printf("Fix pose %d \n", 0);
 
+      // fix the scale. There're several tricks for this.
+      // This is difficult because scale is sensitive to initialization.
+      if (0)
+      {
+        const auto & lmk0 = landmarks_3d.row(0);
+        this->addLandmarkPrior (0, gtsam::Point3(lmk0(0), lmk0(1), lmk0(2)), 0.1 );
+        printf("Fix Landmark %d \n", 0);
+      }
+      else
+      {
+        size_t lmk_1st = 0, lmk_2nd = landmarks_3d.rows() - 1;
 
-      // fix the relative distance between 1st and 2nd landmark
-      size_t lmk_1st = 0, lmk_2nd = landmarks_3d.rows() - 1;
-      double d = std::sqrt( (landmarks_3d.row(lmk_1st) - landmarks_3d.row(lmk_2nd)).squaredNorm() );
-      this->addRelativePointDistanceFactor (lmk_1st, lmk_2nd, d, 0.1);
-      printf("Fix reltive distance between Landmarks (%d, %d): %f \n", static_cast<int>(lmk_1st), static_cast<int>(lmk_2nd), d);
+        double d = std::sqrt( (landmarks_3d.row(lmk_1st) - landmarks_3d.row(lmk_2nd)).squaredNorm() );
+        this->addRelativePointDistancePrior (lmk_1st, lmk_2nd, d, 0.1*d);
+        printf("Fix reltive distance between Landmarks (%d, %d): %f \n", static_cast<int>(lmk_1st), static_cast<int>(lmk_2nd), d);
+
+        const auto & lmk1 = landmarks_3d.row(lmk_1st);
+        double dn1 = gtsam::Point3(lmk1(0), lmk1(1), lmk1(2)).norm();
+        this->addLandmarkNormPrior (lmk_1st, dn1, 0.3*dn1);  
+        printf("Fix Landmark (%d) norm: %f \n", static_cast<int>(lmk_1st), dn1);
+
+        // const auto & lmk2 = landmarks_3d.row(lmk_2nd);
+        // double dn2 = gtsam::Point3(lmk2(0), lmk2(1), lmk2(2)).norm();
+        // this->addLandmarkNormPrior (lmk_2nd, dn2, 1.0*dn2);
+        // printf("Fix Landmark (%d) norm: %f \n", static_cast<int>(lmk_2nd), dn2);
+      }
 
 
-      // constraining absolute position of the first pose cause biases
-      // this->addLandmarkPrior (0, gtsam::Point3(lmk0(0), lmk0(1), lmk0(2)), 0.1);
+      // This DOES NOT work yet.
+      // fix the relative translation distance between 1st and 2nd pose
+
+      // double dt = ( poses[0].col(3) - poses[1].col(3) ).norm();
+      // this->addRRelativePoseTranslationDistancePrior(0, 1, dt, 0.5*dt);
+      // printf("Fix relative translation between poses %d and %d : to %f \n", 0, 1, dt);
+
+
+
 
       gtsam::Values initialEstimate;        
 
@@ -213,13 +244,13 @@ class SelfCalibrationWrapper {
 protected:
 
     /** pose prior: to remove the global gauge/transformation ambiguitiey */
-    void addPosePrior (size_t ith_pose = 0, gtsam::Pose3 pose = gtsam::traits<Pose3>::Identity(), double sigma_rot = 0.001 /*rad on roll, pitch, yaw*/, double sigma_tran = 0.001 /*m on x, y, z*/) {
+    void addPosePrior (size_t ith_pose = 0, gtsam::Pose3 pose = gtsam::traits<Pose3>::Identity(), double sigma_rot = 0.001 /*rad on roll, pitch, yaw*/, double sigma_tran = 0.003 /*m on x, y, z*/) {
       auto poseNoise = gtsam::noiseModel::Diagonal::Sigmas( (Vector(6) << gtsam::Vector3::Constant(sigma_rot), gtsam::Vector3::Constant(sigma_tran)).finished());
       graph.addPrior(gtsam::Symbol('x', ith_pose), pose, poseNoise);
     }
 
     /** landmark prior: to remove the global scale ambiguitiey */
-    void addLandmarkPrior (size_t jth_landmark, gtsam::Point3 landmark_3d, double sigma = 0.1) {
+    void addLandmarkPrior (size_t jth_landmark, gtsam::Point3 landmark_3d, double sigma = 0.001) {
       auto pointNoise = noiseModel::Isotropic::Sigma(3, sigma);
       graph.addPrior(Symbol('l', jth_landmark), landmark_3d, pointNoise);
     }
@@ -230,7 +261,31 @@ protected:
         graph.addPrior(Symbol('K', 0), K, calNoise);
     }
 
-    void addRelativePointDistanceFactor (size_t pth_landmark, size_t qth_landmark, double distance, double sigma = 0.1) {
+    /** pose relative translation norm prior */
+    void addRRelativePoseTranslationDistancePrior (size_t pth_pose, size_t qth_pose, double distance, double sigma = 0.001) {
+      auto dist_noise = noiseModel::Isotropic::Sigma(1, sigma);
+      graph.emplace_shared<RelativePoseTranslationDistanceFactor>(
+          distance,
+          dist_noise,
+          gtsam::Symbol('x', pth_pose),
+          gtsam::Symbol('x', qth_pose)
+          );
+    }
+
+
+
+    /** landmark norm prior: to remove the global scale ambiguitiey */
+    void addLandmarkNormPrior (size_t jth_landmark, double distance, double sigma = 0.001) {
+      auto dist_noise = noiseModel::Isotropic::Sigma(1, sigma);
+      graph.emplace_shared<Point3NormFactor>(
+          distance,
+          dist_noise,
+          gtsam::Symbol('l', jth_landmark)
+          );
+      
+    }
+
+    void addRelativePointDistancePrior (size_t pth_landmark, size_t qth_landmark, double distance, double sigma = 0.001) {
       auto dist_noise = noiseModel::Isotropic::Sigma(1, sigma);
       graph.emplace_shared<RelativePointDistanceFactor>(
           distance,
