@@ -45,6 +45,98 @@ namespace gtsam {
 
 
 
+/**
+ * @brief A factor to constrain the depth of a 3D landmark
+ */
+class Landmark3DDepthFactor: public NoiseModelFactorN<Pose3, Point3> {
+
+protected:
+
+  double measured_;
+
+
+public:
+
+  typedef Landmark3DDepthFactor This;
+  typedef NoiseModelFactorN<Pose3, Point3> Base;///< typedef for the base class
+
+  // shorthand for a smart pointer to a factor
+  typedef std::shared_ptr<This> shared_ptr;
+
+
+  Landmark3DDepthFactor(double measured, const SharedNoiseModel& model, Key posekKey, Key landmarkKey) :
+    Base(model, posekKey, landmarkKey), measured_(measured) {}
+  Landmark3DDepthFactor():measured_(0.0) {} ///< default constructor
+
+  ~Landmark3DDepthFactor() override {} ///< destructor
+
+
+  /// @return a deep copy of this factor
+  gtsam::NonlinearFactor::shared_ptr clone() const override {
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
+        gtsam::NonlinearFactor::shared_ptr(new This(*this)));}
+
+  /**
+   * print
+   * @param s optional string naming the factor
+   * @param keyFormatter optional formatter useful for printing Symbols
+   */
+  void print(const std::string& s = "Landmark3DDepthFactor", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override {
+    Base::print(s, keyFormatter);
+    std::cout << (s.empty() ? s : s + " ") << measured_ << std::endl;
+  }
+
+  /**
+   * equals
+   */
+  bool equals(const NonlinearFactor &p, double tol = 1e-9) const override {
+    const This* e = dynamic_cast<const This*>(&p);
+    return e && Base::equals(p, tol) && std::abs(this->measured_ -  e->measured_) <  tol;
+  }
+
+  double costFuncHelper (const Pose3& pose, const Point3& landmark, OptionalJacobian<1, 6> H1, OptionalJacobian<1, 3> H2) const {
+
+    Eigen::Matrix<double, 3, 6> Hself;
+    Eigen::Matrix<double, 3, 3> Hpoint;
+
+    Point3 lmk = pose.transformTo(landmark, Hself, Hpoint);
+    if (H1) *H1 = Hself.row(2);
+    if (H2) *H2 = Hpoint.row(2);
+    
+    return lmk[2]; /// lmk.z()
+  }
+
+  /** h(x)-z */
+  Vector evaluateError(const Pose3& pose, const Point3& landmark, OptionalMatrixType H1, OptionalMatrixType H2) const override
+  {
+    try {
+      return gtsam::Vector1 ( costFuncHelper(pose, landmark, H1, H2) - measured_ );
+    }
+    catch( CheiralityException& e) {
+      if (H1) *H1 = Matrix::Zero(1, 6);
+      if (H2) *H2 = Matrix::Zero(1, 3);
+      std::cout << e.what() << ": Landmark "<< DefaultKeyFormatter(this->key2())
+          << " behind Camera " << DefaultKeyFormatter(this->key1()) << std::endl;
+    }
+    return Vector1(0);
+  }
+
+  /** return the measured */
+  inline double measured() const {
+    return measured_;
+  }
+
+
+};
+
+template<>
+struct traits<Landmark3DDepthFactor> : Testable< Landmark3DDepthFactor > {};
+
+
+
+
+
+
 
 
 

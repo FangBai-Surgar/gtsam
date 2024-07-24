@@ -49,9 +49,9 @@ class SelfCalibrationWrapper {
 
     typedef gtsam::NonlinearFactorGraph FactorGraph;
 
-    typedef gtsam::DoglegOptimizer optimizer;
+    // typedef gtsam::DoglegOptimizer optimizer;
 
-    // typedef gtsam::GaussNewtonOptimizer optimizer;
+    typedef gtsam::GaussNewtonOptimizer optimizer;
 
     // typedef gtsam::LevenbergMarquardtOptimizer optimizer; 
 
@@ -141,13 +141,35 @@ class SelfCalibrationWrapper {
                         std::vector<Eigen::Matrix4d> & poses,
                         Eigen::Matrix<double, Eigen::Dynamic, 3> & landmarks_3d) {
 
-
       // fix the first pose in optimization
       this->addPosePrior(0, gtsam::Pose3(poses[0]), 0.001, 0.003);
       printf("Fix pose %d \n", 0);
 
       // fix the scale. There're several tricks for this.
       // This is difficult because scale is sensitive to initialization.
+    if(1)
+    {
+      size_t ith_pose = 0, jth_landmark = 0;
+      double sigma = 1.0;
+      Pose3 pose(poses[ith_pose]);
+      Point3 pt(landmarks_3d.row(jth_landmark)[0], landmarks_3d.row(jth_landmark)[1], landmarks_3d.row(jth_landmark)[2]);
+      double depthij = pose.transformTo(pt)[2];
+      this->addLandmarkDepthPrior (ith_pose, jth_landmark, depthij, sigma);
+      printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
+    }
+    if(1)
+    {
+      size_t ith_pose = 0, jth_landmark = 1; //landmarks_3d.rows()-1;
+      double sigma = 10.0;
+      Pose3 pose(poses[ith_pose]);
+      Point3 pt(landmarks_3d.row(jth_landmark)[0], landmarks_3d.row(jth_landmark)[1], landmarks_3d.row(jth_landmark)[2]);
+      double depthij = pose.transformTo(pt)[2];
+      this->addLandmarkDepthPrior (ith_pose, jth_landmark, depthij, sigma);
+      printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
+    }
+
+
+#ifdef SURGAR_SELFCALIBRATION_TEST_FANG
       if (0)
       {
         const auto & lmk0 = landmarks_3d.row(0);
@@ -180,7 +202,7 @@ class SelfCalibrationWrapper {
       // double dt = ( poses[0].col(3) - poses[1].col(3) ).norm();
       // this->addRRelativePoseTranslationDistancePrior(0, 1, dt, 0.5*dt);
       // printf("Fix relative translation between poses %d and %d : to %f \n", 0, 1, dt);
-
+#endif
 
 
 
@@ -260,6 +282,24 @@ protected:
         auto calNoise = noiseModel::Diagonal::Sigmas((Vector(1) << 500).finished());
         graph.addPrior(Symbol('K', 0), K, calNoise);
     }
+
+
+    /** landmark prior: to remove the global scale ambiguitiey */
+    void addLandmarkDepthPrior (size_t ith_pose, size_t jth_landmark, double depth, double sigma = 1.0) {
+      if (depth <=0) {
+        std::cerr << "Depth of landmark " << jth_landmark << "is not positive! Not added as a prior" << std::endl;
+        return;
+      }
+      auto depth_noise = noiseModel::Isotropic::Sigma(1, sigma);
+      graph.emplace_shared<Landmark3DDepthFactor>(
+          depth,
+          depth_noise,
+          gtsam::Symbol('x', ith_pose),
+          gtsam::Symbol('l', jth_landmark)
+          );
+    }
+
+
 
     /** pose relative translation norm prior */
     void addRRelativePoseTranslationDistancePrior (size_t pth_pose, size_t qth_pose, double distance, double sigma = 0.001) {
