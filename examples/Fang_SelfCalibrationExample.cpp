@@ -107,6 +107,9 @@ int main(int argc, char* argv[]) {
 
   std::cout << "\n";
 
+  
+  calGraph.add_pose_prior(0, var_poses[0]);
+
 
 
   double var_focal = 200;

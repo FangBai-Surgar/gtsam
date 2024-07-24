@@ -173,14 +173,23 @@ public:
 
   double costFuncHelper (const Pose3& pose, const Point3& landmark, OptionalJacobian<1, 6> H1, OptionalJacobian<1, 3> H2) const {
 
-    Eigen::Matrix<double, 3, 6> Hself;
-    Eigen::Matrix<double, 3, 3> Hpoint;
+      const Matrix3 Rt = pose.rotation().transpose();
+      const Point3 q(Rt*(landmark - pose.translation()));
+      if (H1) {
+        const double wx = q.x(), wy = q.y(), wz = q.z();
+        (*H1) << -wy, +wx, 0.0, 0.0, 0.0,-1.0;
+      }
+      if (H2) {
+        *H2 = Rt.row(2);
+      }
+      return q[2];
 
-    Point3 lmk = pose.transformTo(landmark, Hself, Hpoint);
-    if (H1) *H1 = Hself.row(2);
-    if (H2) *H2 = Hpoint.row(2);
-    
-    return lmk[2]; /// lmk.z()
+      // Eigen::Matrix<double, 3, 6> Hself;
+      // Eigen::Matrix<double, 3, 3> Hpoint;
+      // Point3 lmk = pose.transformTo(landmark, Hself, Hpoint);
+      // if (H1) *H1 = Hself.row(2);
+      // if (H2) *H2 = Hpoint.row(2);    
+      // return lmk[2]; /// lmk.z()
   }
 
   /** h(x)-z */

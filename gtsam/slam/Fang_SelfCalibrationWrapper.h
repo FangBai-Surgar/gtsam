@@ -73,7 +73,19 @@ class SelfCalibrationWrapper {
 
     SelfCalibrationWrapper() : graph(), verbose_(false) {}
 
-    void add_keypoints_2d (int ith_pose, int jth_landmark, const gtsam::Point2 & img_kpts, double sigma = 1.0) {
+
+    void verbose (bool val = true) { verbose_ = val; }
+
+
+    /** pose prior: to remove the global gauge/transformation ambiguitiey */
+    void add_pose_prior (size_t ith_pose = 0, const Eigen::Matrix4d& pose = Eigen::Matrix4d::Identity(), 
+                         double sigma_rot = 0.001 /*rad on roll, pitch, yaw*/, double sigma_tran = 0.003 /*m on x, y, z*/) {
+      auto poseNoise = gtsam::noiseModel::Diagonal::Sigmas( (Vector(6) << gtsam::Vector3::Constant(sigma_rot), gtsam::Vector3::Constant(sigma_tran)).finished());
+      graph.addPrior(gtsam::Symbol('x', ith_pose), gtsam::Pose3(pose), poseNoise);
+    }
+
+
+    void add_keypoints_2d (int ith_pose, int jth_landmark, const Eigen::Vector2d& img_kpts, double sigma = 1.0) {
       /** image noise */
       auto img_noise = gtsam::noiseModel::Isotropic::Sigma(2, sigma);
       /** add factor and its measurement */
@@ -86,12 +98,12 @@ class SelfCalibrationWrapper {
           );
     }
 
-    void add_keypoints_2d_from_fixed_pose (const Pose3& pose, int jth_landmark, const gtsam::Point2 & img_kpts, double sigma = 1.0) {
+    void add_keypoints_2d_from_fixed_pose (const Eigen::Matrix4d& pose, int jth_landmark, const Eigen::Vector2d & img_kpts, double sigma = 1.0) {
       auto img_noise = gtsam::noiseModel::Isotropic::Sigma(2, sigma);
       /** add factor and its measurement */
       graph.emplace_shared<FixedPoseSelfCalibrationFactor>(
           img_kpts,
-          pose,
+          gtsam::Pose3(pose),
           img_noise,
           gtsam::Symbol('l', jth_landmark),
           gtsam::Symbol('K', 0)
@@ -102,23 +114,6 @@ class SelfCalibrationWrapper {
     /** @brief A unified interface function for SURGAR 
      * @brief After optimization, this function updates the values passed through the function arguments.
     */
-
-
-    template <typename Landmark3DArrayType>
-    void optimize_from_3view (double & focal, double & kappa, double & u0, double & v0,
-                              Eigen::Matrix4d & pose1, Eigen::Matrix4d & pose2, Eigen::Matrix4d & pose3, 
-                              Landmark3DArrayType & landmarks_3d) {
-
-      std::vector<Eigen::Matrix4d> poses;
-
-      poses.push_back(pose1); poses.push_back(pose2); poses.push_back(pose3);
-
-      this->optimize_from (focal, kappa, u0, v0, poses, landmarks_3d);
-
-      pose1 = poses[0]; pose2 = poses[1]; pose3 = poses[2];
-
-    }
-
 
 
     template <typename Landmark3DArrayType>
@@ -162,14 +157,11 @@ class SelfCalibrationWrapper {
                         std::vector<Eigen::Matrix4d> & poses,
                         Eigen::Matrix<double, Eigen::Dynamic, 3> & landmarks_3d) {
 
-      // fix the first pose in optimization
-      this->addPosePrior(0, gtsam::Pose3(poses[0]), 0.001, 0.003);
-      printf("Fix pose %d \n", 0);
 
       // fix the scale. There're several tricks for this.
       // This is difficult because scale is sensitive to initialization.
   
-    if(1)
+    if(0)
     {
       size_t ith_pose = 0, jth_landmark = 0;
       double sigma = 0.1;
@@ -204,13 +196,13 @@ class SelfCalibrationWrapper {
     }
     
 
-      if (0)
+      if (1)
       {
         const auto & lmk0 = landmarks_3d.row(0);
         this->addLandmarkPrior (0, gtsam::Point3(lmk0(0), lmk0(1), lmk0(2)), 0.1 );
         printf("Fix Landmark %d \n", 0);
       }
-      if (1)
+      if (0)
       {
         size_t lmk_1st = 0, lmk_2nd = landmarks_3d.rows() - 1;
 
@@ -240,7 +232,13 @@ class SelfCalibrationWrapper {
 
 
 
-      gtsam::Values initialEstimate;        
+      gtsam::Values initialEstimate;
+
+      if (0) {
+        graph.print("\nFactor Graph:\n");
+        initialEstimate.print("\nInitial Values:\n");
+      }
+
 
       initialEstimate.insert(gtsam::Symbol('K', 0), CALIBRATION(focal, kappa, u0, v0));
 
@@ -294,14 +292,6 @@ class SelfCalibrationWrapper {
 
 
 
-    void verbose (bool val = true) { verbose_ = val; }
-
-
-    /** pose prior: to remove the global gauge/transformation ambiguitiey */
-    void addPosePrior (size_t ith_pose = 0, gtsam::Pose3 pose = gtsam::traits<Pose3>::Identity(), double sigma_rot = 0.001 /*rad on roll, pitch, yaw*/, double sigma_tran = 0.003 /*m on x, y, z*/) {
-      auto poseNoise = gtsam::noiseModel::Diagonal::Sigmas( (Vector(6) << gtsam::Vector3::Constant(sigma_rot), gtsam::Vector3::Constant(sigma_tran)).finished());
-      graph.addPrior(gtsam::Symbol('x', ith_pose), pose, poseNoise);
-    }
 
 
 protected:
