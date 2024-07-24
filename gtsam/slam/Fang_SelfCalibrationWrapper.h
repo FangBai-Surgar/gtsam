@@ -28,6 +28,12 @@
 
 
 
+/** GTSAM pose.transformTo
+ * 
+      const Matrix3 Rt = R_.transpose();
+      const Point3 q(Rt*(point - t_));
+ * 
+ */
 
 
 
@@ -38,14 +44,16 @@ namespace gtsam {
 
 
 
-template < typename CALIBRATION,  template<typename> class DIST_CALIB_PROJ_FACTOR >
+template < typename CALIBRATION >
 class SelfCalibrationWrapper {
 
   public:
 
     typedef CALIBRATION CALIBRATION_MODEL;
 
-    typedef DIST_CALIB_PROJ_FACTOR<CALIBRATION> SelfCalibrationFactor;
+    typedef UncalibratedProjectionFactor<CALIBRATION> SelfCalibrationFactor;
+    
+    typedef FixedPoseUncalibratedProjectionFactor<CALIBRATION> FixedPoseSelfCalibrationFactor;
 
     typedef gtsam::NonlinearFactorGraph FactorGraph;
 
@@ -77,6 +85,19 @@ class SelfCalibrationWrapper {
           gtsam::Symbol('K', 0)
           );
     }
+
+    void add_keypoints_2d_from_fixed_pose (const Pose3& pose, int jth_landmark, const gtsam::Point2 & img_kpts, double sigma = 1.0) {
+      auto img_noise = gtsam::noiseModel::Isotropic::Sigma(2, sigma);
+      /** add factor and its measurement */
+      graph.emplace_shared<FixedPoseSelfCalibrationFactor>(
+          img_kpts,
+          pose,
+          img_noise,
+          gtsam::Symbol('l', jth_landmark),
+          gtsam::Symbol('K', 0)
+          );
+    }
+
   
     /** @brief A unified interface function for SURGAR 
      * @brief After optimization, this function updates the values passed through the function arguments.
@@ -147,36 +168,49 @@ class SelfCalibrationWrapper {
 
       // fix the scale. There're several tricks for this.
       // This is difficult because scale is sensitive to initialization.
+  
     if(1)
     {
       size_t ith_pose = 0, jth_landmark = 0;
-      double sigma = 1.0;
+      double sigma = 0.1;
       Pose3 pose(poses[ith_pose]);
       Point3 pt(landmarks_3d.row(jth_landmark)[0], landmarks_3d.row(jth_landmark)[1], landmarks_3d.row(jth_landmark)[2]);
       double depthij = pose.transformTo(pt)[2];
-      this->addLandmarkDepthPrior (ith_pose, jth_landmark, depthij, sigma);
+      this->addLandmarkDepthPrior (ith_pose, jth_landmark, depthij, sigma*depthij);
       printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
     }
-    if(1)
+    if(0)
     {
-      size_t ith_pose = 0, jth_landmark = 1; //landmarks_3d.rows()-1;
-      double sigma = 10.0;
+      size_t ith_pose = 0, jth_landmark = landmarks_3d.rows()-1;
+      double sigma = 0.1;
       Pose3 pose(poses[ith_pose]);
       Point3 pt(landmarks_3d.row(jth_landmark)[0], landmarks_3d.row(jth_landmark)[1], landmarks_3d.row(jth_landmark)[2]);
       double depthij = pose.transformTo(pt)[2];
-      this->addLandmarkDepthPrior (ith_pose, jth_landmark, depthij, sigma);
+      this->addLandmarkDepthPrior (ith_pose, jth_landmark, depthij, sigma*depthij);
       printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
     }
+    if(0)
+    {
+      size_t ith_pose = 0;
+      double sigma = 0.5;
+      for (size_t jth_landmark = 0; jth_landmark < static_cast<size_t>(landmarks_3d.rows()); jth_landmark++)
+      {
+          Pose3 pose(poses[ith_pose]);
+          Point3 pt(landmarks_3d.row(jth_landmark)[0], landmarks_3d.row(jth_landmark)[1], landmarks_3d.row(jth_landmark)[2]);
+          double depthij = pose.transformTo(pt)[2];
+          this->addLandmarkDepthPrior (ith_pose, jth_landmark, depthij, sigma*depthij);
+          printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
+      }
+    }
+    
 
-
-#ifdef SURGAR_SELFCALIBRATION_TEST_FANG
       if (0)
       {
         const auto & lmk0 = landmarks_3d.row(0);
         this->addLandmarkPrior (0, gtsam::Point3(lmk0(0), lmk0(1), lmk0(2)), 0.1 );
         printf("Fix Landmark %d \n", 0);
       }
-      else
+      if (1)
       {
         size_t lmk_1st = 0, lmk_2nd = landmarks_3d.rows() - 1;
 
@@ -184,10 +218,10 @@ class SelfCalibrationWrapper {
         this->addRelativePointDistancePrior (lmk_1st, lmk_2nd, d, 0.1*d);
         printf("Fix reltive distance between Landmarks (%d, %d): %f \n", static_cast<int>(lmk_1st), static_cast<int>(lmk_2nd), d);
 
-        const auto & lmk1 = landmarks_3d.row(lmk_1st);
-        double dn1 = gtsam::Point3(lmk1(0), lmk1(1), lmk1(2)).norm();
-        this->addLandmarkNormPrior (lmk_1st, dn1, 0.3*dn1);  
-        printf("Fix Landmark (%d) norm: %f \n", static_cast<int>(lmk_1st), dn1);
+        // const auto & lmk1 = landmarks_3d.row(lmk_1st);
+        // double dn1 = gtsam::Point3(lmk1(0), lmk1(1), lmk1(2)).norm();
+        // this->addLandmarkNormPrior (lmk_1st, dn1, 0.3*dn1);  
+        // printf("Fix Landmark (%d) norm: %f \n", static_cast<int>(lmk_1st), dn1);
 
         // const auto & lmk2 = landmarks_3d.row(lmk_2nd);
         // double dn2 = gtsam::Point3(lmk2(0), lmk2(1), lmk2(2)).norm();
@@ -202,7 +236,7 @@ class SelfCalibrationWrapper {
       // double dt = ( poses[0].col(3) - poses[1].col(3) ).norm();
       // this->addRRelativePoseTranslationDistancePrior(0, 1, dt, 0.5*dt);
       // printf("Fix relative translation between poses %d and %d : to %f \n", 0, 1, dt);
-#endif
+
 
 
 
@@ -263,13 +297,15 @@ class SelfCalibrationWrapper {
     void verbose (bool val = true) { verbose_ = val; }
 
 
-protected:
-
     /** pose prior: to remove the global gauge/transformation ambiguitiey */
     void addPosePrior (size_t ith_pose = 0, gtsam::Pose3 pose = gtsam::traits<Pose3>::Identity(), double sigma_rot = 0.001 /*rad on roll, pitch, yaw*/, double sigma_tran = 0.003 /*m on x, y, z*/) {
       auto poseNoise = gtsam::noiseModel::Diagonal::Sigmas( (Vector(6) << gtsam::Vector3::Constant(sigma_rot), gtsam::Vector3::Constant(sigma_tran)).finished());
       graph.addPrior(gtsam::Symbol('x', ith_pose), pose, poseNoise);
     }
+
+
+protected:
+
 
     /** landmark prior: to remove the global scale ambiguitiey */
     void addLandmarkPrior (size_t jth_landmark, gtsam::Point3 landmark_3d, double sigma = 0.001) {
@@ -347,7 +383,7 @@ protected:
 
 namespace gtsam {
 
-  typedef gtsam::SelfCalibrationWrapper < gtsam::Cal_fd, gtsam::UncalibratedProjectionFactor> SelfCalibrationForward;
+  typedef gtsam::SelfCalibrationWrapper < gtsam::Cal_fd > SelfCalibrationForward;
 
 } // namespace
 

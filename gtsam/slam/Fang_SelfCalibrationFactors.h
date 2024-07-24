@@ -34,8 +34,85 @@
 #include <string>
 
 
+/**@note: PinholePose.h
+ * 
+ * 
+    template <class POINT>
+    Point2 _project(const POINT& pw, OptionalJacobian<2, 6> Dpose,
+        OptionalJacobian<2, FixedDimension<POINT>::value> Dpoint,
+        OptionalJacobian<2, DimK> Dcal) const {
+
+      // project to normalized coordinates
+      const Point2 pn = PinholeBase::project2(pw, Dpose, Dpoint);
+
+      // uncalibrate to pixel coordinates
+      Matrix2 Dpi_pn;
+      const Point2 pi = calibration().uncalibrate(pn, Dcal,
+          Dpose || Dpoint ? &Dpi_pn : 0);
+
+      // If needed, apply chain rule
+      if (Dpose)
+        *Dpose = Dpi_pn * *Dpose;
+      if (Dpoint)
+        *Dpoint = Dpi_pn * *Dpoint;
+
+      return pi;
+    }
+ * 
+ */
 
 
+
+/**@note: CalibratedCamera.cpp
+ * 
+ * 
+    Point2 PinholeBase::project2(const Point3& point, OptionalJacobian<2, 6> Dpose,
+        OptionalJacobian<2, 3> Dpoint) const {
+
+      Matrix3 Rt; // calculated by transformTo if needed
+      const Point3 q = pose().transformTo(point, {}, Dpoint ? &Rt : 0);
+    #ifdef GTSAM_THROW_CHEIRALITY_EXCEPTION
+      if (q.z() <= 0)
+        throw CheiralityException();
+    #endif
+      const Point2 pn = Project(q);
+
+      if (Dpose || Dpoint) {
+        const double d = 1.0 / q.z();
+        if (Dpose)
+          *Dpose = PinholeBase::Dpose(pn, d);
+        if (Dpoint)
+          *Dpoint = PinholeBase::Dpoint(pn, d, Rt);
+      }
+      return pn;
+    }
+ */
+
+
+
+/**@note Pose3.cpp
+ * 
+ * 
+    Point3 Pose3::transformTo(const Point3& point, OptionalJacobian<3, 6> Hself,
+        OptionalJacobian<3, 3> Hpoint) const {
+      // Only get transpose once, to avoid multiple allocations,
+      // as well as multiple conversions in the Quaternion case
+      const Matrix3 Rt = R_.transpose();
+      const Point3 q(Rt*(point - t_));
+      if (Hself) {
+        const double wx = q.x(), wy = q.y(), wz = q.z();
+        (*Hself) <<
+            0.0, -wz, +wy,-1.0, 0.0, 0.0,
+            +wz, 0.0, -wx, 0.0,-1.0, 0.0,
+            -wy, +wx, 0.0, 0.0, 0.0,-1.0;
+      }
+      if (Hpoint) {
+        *Hpoint = Rt;
+      }
+      return q;
+    }
+ * 
+ */
 
 
 
@@ -520,6 +597,128 @@ struct traits<UncalibratedProjectionFactor<CALIBRATION> > : Testable<
 
 
 } //namespace
+
+
+
+
+
+namespace gtsam{
+
+
+/**
+ * Non-linear factor for a constraint derived from a 2D measurement.
+ * Compared to GeneralSFMFactor, it is a ternary-factor because the calibration is isolated from camera..
+ */
+template<class CALIBRATION>
+class FixedPoseUncalibratedProjectionFactor: public NoiseModelFactorN<Point3, CALIBRATION> {
+
+  GTSAM_CONCEPT_MANIFOLD_TYPE(CALIBRATION)
+  static const int DimK = FixedDimension<CALIBRATION>::value;
+
+protected:
+
+  Point2 measured_; ///< the 2D measurement
+
+  Pose3 pose_;
+
+public:
+
+  typedef FixedPoseUncalibratedProjectionFactor<CALIBRATION> This;
+  typedef PinholeCamera<CALIBRATION> Camera;///< typedef for camera type
+  typedef NoiseModelFactorN<Point3, CALIBRATION> Base;///< typedef for the base class
+
+  // shorthand for a smart pointer to a factor
+  typedef std::shared_ptr<This> shared_ptr;
+
+  /**
+   * Constructor
+   * @param measured is the 2 dimensional location of point in image (the measurement)
+   * @param model is the standard deviation of the measurements
+   * @param poseKey is the index of the camera
+   * @param landmarkKey is the index of the landmark
+   * @param calibKey is the index of the calibration
+   */
+  FixedPoseUncalibratedProjectionFactor(const Point2& measured, const Pose3& pose, const SharedNoiseModel& model, Key landmarkKey, Key calibKey) :
+      Base(model, landmarkKey, calibKey), measured_(measured), pose_(pose) {}
+  FixedPoseUncalibratedProjectionFactor():measured_(0.0,0.0), pose_(Eigen::Matrix4d::Identity()) {} ///< default constructor
+
+  ~FixedPoseUncalibratedProjectionFactor() override {} ///< destructor
+
+  /// @return a deep copy of this factor
+  gtsam::NonlinearFactor::shared_ptr clone() const override {
+    return std::static_pointer_cast<gtsam::NonlinearFactor>(
+        gtsam::NonlinearFactor::shared_ptr(new This(*this)));}
+
+  /**
+   * print
+   * @param s optional string naming the factor
+   * @param keyFormatter optional formatter useful for printing Symbols
+   */
+  void print(const std::string& s = "FixedPoseUncalibratedProjectionFactor", const KeyFormatter& keyFormatter = DefaultKeyFormatter) const override {
+      Base::print(s, keyFormatter);
+      traits<Point2>::Print(measured_, s + ".z");
+      traits<Pose3>::Print(pose_, s + ".z");
+  }
+
+  /**
+   * equals
+   */
+  bool equals(const NonlinearFactor &p, double tol = 1e-9) const override {
+    const This* e = dynamic_cast<const This*>(&p);
+    // return e && Base::equals(p, tol) && traits<Point2>::Equals(this->measured_, e->measured_, tol) && traits<Pose3>::Equals(this->pose_, e->pose_, tol);
+    return e && Base::equals(p, tol) && traits<Point2>::Equals(this->measured_, e->measured_, tol) && pose_.equals(e->pose_, tol);
+  }
+
+  /** h(x)-z */
+  Vector evaluateError(const Point3& point, const CALIBRATION &calib,
+      // OptionalMatrixType H1,
+      OptionalMatrixType H2,
+      OptionalMatrixType H3) const override
+  {
+    try {
+      // Eigen::Matrix<double, 6, 6> H1;
+      Camera camera(pose_, calib);
+      return camera.project(point, {}, H2, H3) - measured_;
+    }
+    catch( CheiralityException& e) {
+      // if (H1) *H1 = Matrix::Zero(2, 6);
+      if (H2) *H2 = Matrix::Zero(2, 3);
+      if (H3) *H3 = Matrix::Zero(2, DimK);
+      std::cout << e.what() << ": Landmark "<< DefaultKeyFormatter(this->key1())
+                << " behind Fixed Camera " << std::endl;
+    }
+    return Z_2x1;
+  }
+
+  /** return the measured */
+  inline const Point2 measured() const {
+    return measured_;
+  }
+
+private:
+#ifdef GTSAM_ENABLE_BOOST_SERIALIZATION
+  /** Serialization function */
+  friend class boost::serialization::access;
+  template<class Archive>
+  void serialize(Archive & ar, const unsigned int /*version*/) {
+    // NoiseModelFactor3 instead of NoiseModelFactorN for backward compatibility
+    ar & boost::serialization::make_nvp("NoiseModelFactorN",
+        boost::serialization::base_object<Base>(*this));
+    ar & BOOST_SERIALIZATION_NVP(measured_);
+  }
+#endif
+};
+
+template<class CALIBRATION>
+struct traits<FixedPoseUncalibratedProjectionFactor<CALIBRATION> > : Testable<
+    FixedPoseUncalibratedProjectionFactor<CALIBRATION> > {
+};
+
+
+} //namespace
+
+
+
 
 
 
