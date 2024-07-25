@@ -51,6 +51,8 @@ std::vector<gtsam::Pose3> createPoses(
 
 
 
+
+
 int main(int argc, char* argv[]) {
 
 
@@ -72,15 +74,7 @@ int main(int argc, char* argv[]) {
   FGO calGraph;
   calGraph.verbose(true);
    
-  /** add observations to 2d image key points */
-  for (size_t i = 0; i < poses.size(); ++i) {
-    for (size_t j = 0; j < points.size(); ++j) {
-      PinholeCamera<FGO::CALIBRATION_MODEL> camera(poses[i], K);
-      Point2 measurement = camera.project(points[j]);
 
-      calGraph.add_keypoints_2d (i, j, measurement, 1.0);
-    }
-  }
 
 
   /** initial estimates */
@@ -108,7 +102,28 @@ int main(int argc, char* argv[]) {
   std::cout << "\n";
 
   
-  calGraph.add_pose_prior(0, var_poses[0]);
+
+
+  /** pose 0. fixed or need a prior */
+  if (1) 
+  {
+    calGraph.add_pose_prior(0, var_poses[0]);
+  } 
+  else 
+  {
+    calGraph.set_fixed_pose(0, var_poses[0]);
+  }
+
+  /** add observations to 2d image key points */
+  for (size_t i = 0; i < poses.size(); ++i) {
+    for (size_t j = 0; j < points.size(); ++j) {
+      PinholeCamera<FGO::CALIBRATION_MODEL> camera(poses[i], K);
+      Point2 measurement = camera.project(points[j]);
+
+      calGraph.add_keypoints_2d (i, j, measurement, 1.0);
+    }
+  }
+
 
 
 
