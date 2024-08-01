@@ -72,8 +72,7 @@ int main(int argc, char* argv[]) {
 
   typedef gtsam::SelfCalibrationForward FGO;
   FGO calGraph;
-  calGraph.verbose(true);
-   
+
 
 
 
@@ -105,7 +104,7 @@ int main(int argc, char* argv[]) {
 
 
   /** pose 0. fixed or need a prior */
-  if (1) 
+  if (0) 
   {
     calGraph.add_pose_prior(0, var_poses[0]);
   } 
@@ -123,6 +122,13 @@ int main(int argc, char* argv[]) {
       calGraph.add_keypoints_2d (i, j, measurement, 1.0);
     }
   }
+  
+  
+  calGraph.add_landmark_depth_prior (0, 0, poses[0].transformTo(points[0]).z(), 1.0);
+  calGraph.add_landmark_depth_prior (0, 1, poses[0].transformTo(points[1]).z(), 1.0);
+
+
+  calGraph.set_verbose(4);
 
 
 
@@ -181,12 +187,12 @@ int main(int argc, char* argv[]) {
 
 
 
-  var_focal = 800;
-  var_kappa = -1.0;
-  /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
-  calGraph.optimize_from(var_focal, var_kappa, var_u0, var_v0, var_poses, var_points);
+  // var_focal = 800;
+  // var_kappa = -1.0;
+  // /** For priors, make sure the values assigned to the first pose, and the first landmark are consistent with the measurement */
+  // calGraph.optimize_from(var_focal, var_kappa, var_u0, var_v0, var_poses, var_points);
 
-  std::cout << "\n";
+  // std::cout << "\n";
 
 
 

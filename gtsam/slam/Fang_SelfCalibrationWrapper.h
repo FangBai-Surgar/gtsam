@@ -57,18 +57,24 @@ class SelfCalibrationWrapper {
 
     typedef gtsam::NonlinearFactorGraph FactorGraph;
 
-    // typedef gtsam::DoglegOptimizer optimizer;
+    // typedef gtsam::DoglegOptimizer Optimizer;
 
-    typedef gtsam::GaussNewtonOptimizer optimizer;
+    typedef gtsam::GaussNewtonOptimizer Optimizer;
+    typedef gtsam::GaussNewtonParams OptimizerParams;
 
-    // typedef gtsam::LevenbergMarquardtOptimizer optimizer;  //  too slow convergence
+    // typedef gtsam::LevenbergMarquardtOptimizer Optimizer;  //  too slow convergence
+
+
+    enum VERBOSE { SILENT = 0,  GRAPH = 1, ITERS = 2,  RESULT = 4 };
 
 
   protected:
 
     FactorGraph graph_;
 
-    bool verbose_;
+    int verbose_;
+
+    bool debug_factor_graph_;
 
     // the fixed pose is stored here, and passed as a std::shared_ptr to inner factors etc.
     // memory allocated when calling set_fixed_pose(id, pose)
@@ -78,10 +84,10 @@ class SelfCalibrationWrapper {
 
   public:
 
-    SelfCalibrationWrapper() : graph_(), verbose_(false), fixed_pose_id_(2147483647), ptr_fixed_pose_(nullptr) {}
+    SelfCalibrationWrapper() : graph_(), verbose_(false), debug_factor_graph_(false), fixed_pose_id_(2147483647), ptr_fixed_pose_(nullptr) {}
 
 
-    void verbose (bool val = true) { verbose_ = val; }
+    void set_verbose (int val = VERBOSE::SILENT) { verbose_ = val; }
 
     
     void set_fixed_pose (size_t id, const Eigen::Matrix4d& pose) 
@@ -210,7 +216,7 @@ class SelfCalibrationWrapper {
     {
       // fix the scale. There're several tricks for this.
       // This is difficult because scale is sensitive to initialization.
-      if (1)
+      if (0)
       {
         size_t ith_pose = 0, jth_landmark = 0;
         double sigma = 0.1;
@@ -220,7 +226,7 @@ class SelfCalibrationWrapper {
         this->add_landmark_depth_prior (ith_pose, jth_landmark, depthij, sigma*depthij);
         printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
       }
-      if (1)
+      if (0)
       {
         size_t ith_pose = 0, jth_landmark = landmarks_3d.rows()-1;
         double sigma = 0.1;
@@ -307,7 +313,7 @@ class SelfCalibrationWrapper {
 
 
 
-      if (0&&verbose_) {
+      if (verbose_ & VERBOSE::GRAPH) {
         graph_.print("\nFactor Graph:\n");
       }
 
@@ -326,19 +332,34 @@ class SelfCalibrationWrapper {
         initialEstimate.insert(gtsam::Symbol('l', j), gtsam::Point3(lmk(0), lmk(1), lmk(2)));
       }
 
-      if (0&&verbose_) {
+      if (verbose_ & VERBOSE::GRAPH) {
         graph_.print("\nFactor Graph:\n");
         initialEstimate.print("\nInitial Values:\n");
       }
 
+
+
+
+
+
       /**
        * @brief Optimize the graph and print results 
        * */
-      gtsam::Values result = optimizer(graph_, initialEstimate).optimize();
 
-      if (0&&verbose_) {
+      OptimizerParams opt_params;
+      if (verbose_ & VERBOSE::ITERS){
+          opt_params.setVerbosity("ERROR");  //// SILENT, TERMINATION, ERROR, VALUES, DELTA, LINEAR
+          opt_params.print();
+      }
+      gtsam::Values result = Optimizer(graph_, initialEstimate, opt_params).optimize();
+
+
+      if (verbose_ & VERBOSE::GRAPH) {
         result.print("\nFinal Result:\n");
       }
+
+
+
 
       /** 
        * @brief obtain the optimised value for each variable 
@@ -357,7 +378,7 @@ class SelfCalibrationWrapper {
 
 
 
-      if (verbose_) {
+      if (verbose_ & VERBOSE::RESULT) {
         std::cout << " -------------- Calibration K ------------------ " << "\n";
         std::cout << "Init: \t" << initialEstimate.at(gtsam::Symbol('K', 0)).cast<CALIBRATION>() <<"\n";
         std::cout << "Opt:  \t" << result.at(gtsam::Symbol('K', 0)).cast<CALIBRATION>() << "\n";
