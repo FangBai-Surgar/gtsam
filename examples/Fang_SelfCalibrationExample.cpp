@@ -25,6 +25,15 @@ std::vector<gtsam::Point3> createPoints() {
   points.push_back(gtsam::Point3(-10.0,-10.0,-10.0));
   points.push_back(gtsam::Point3(10.0,-10.0,-10.0));
 
+  // points.push_back(gtsam::Point3( 5.0,0.0,0.0));
+  // points.push_back(gtsam::Point3(-5.0,0.0,0.0));
+  // points.push_back(gtsam::Point3(0.0, 5.0,0.0));
+  // points.push_back(gtsam::Point3(0.0,-5.0,0.0));  
+  // points.push_back(gtsam::Point3(0.0,0.0, 5.0));
+  // points.push_back(gtsam::Point3(0.0,0.0,-5.0));  
+
+  points.push_back(gtsam::Point3(0.0,0.0,0.0));  
+
   return points;
 }
 
@@ -104,8 +113,8 @@ int main(int argc, char* argv[]) {
 
 
   /** pose 0. fixed or need a prior */
-  if (0) 
-  {
+  if (1)
+  { 
     calGraph.add_pose_prior(0, var_poses[0]);
   } 
   else 
@@ -124,11 +133,11 @@ int main(int argc, char* argv[]) {
   }
   
   
-  calGraph.add_landmark_depth_prior (0, 0, poses[0].transformTo(points[0]).z(), 1.0);
-  calGraph.add_landmark_depth_prior (0, 1, poses[0].transformTo(points[1]).z(), 1.0);
+  calGraph.add_landmark_depth_prior (0, 0, poses[0].transformTo(points[0]).z(), 10);
+  calGraph.add_landmark_depth_prior (0, 1, poses[0].transformTo(points[1]).z(), 10);
 
 
-  calGraph.set_verbose(4);
+  calGraph.set_verbose(2+4);
 
 
 
