@@ -58,11 +58,10 @@ class SelfCalibrationWrapper {
     typedef gtsam::NonlinearFactorGraph FactorGraph;
 
     // typedef gtsam::DoglegOptimizer Optimizer;
+    // typedef gtsam::DoglegParams OptimizerParams;
 
     typedef gtsam::GaussNewtonOptimizer Optimizer;
     typedef gtsam::GaussNewtonParams OptimizerParams;
-
-    // typedef gtsam::LevenbergMarquardtOptimizer Optimizer;  //  too slow convergence
 
 
     enum VERBOSE { SILENT = 0,  GRAPH = 1, ITERS = 2,  RESULT = 4 };
