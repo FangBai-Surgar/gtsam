@@ -60,8 +60,9 @@ class SelfCalibrationWrapper {
     typedef gtsam::DoglegOptimizer Optimizer;
     typedef gtsam::DoglegParams OptimizerParams;
 
-    // typedef gtsam::GaussNewtonOptimizer Optimizer;
-    // typedef gtsam::GaussNewtonParams OptimizerParams;
+    // Gauss-Newton has convergence issues when working with real data
+    //typedef gtsam::GaussNewtonOptimizer Optimizer;
+    //typedef gtsam::GaussNewtonParams OptimizerParams;
 
 
     enum VERBOSE { SILENT = 0,  GRAPH = 1, ITERS = 2,  RESULT = 4 };
