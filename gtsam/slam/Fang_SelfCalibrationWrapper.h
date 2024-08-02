@@ -398,11 +398,16 @@ class SelfCalibrationWrapper {
        * */
 
       OptimizerParams opt_params;
+      opt_params.setDeltaInitial(1.0);
+      opt_params.setMaxIterations(200);
+      opt_params.setRelativeErrorTol(1e-6);
+      opt_params.setAbsoluteErrorTol(1e-6);
       if (verbose_ & VERBOSE::ITERS){
           opt_params.setVerbosity("ERROR");  //// SILENT, TERMINATION, ERROR, VALUES, DELTA, LINEAR
           opt_params.print();
       }
       gtsam::Values result = Optimizer(graph_, initialEstimate, opt_params).optimize();
+
 
 
       if (verbose_ & VERBOSE::GRAPH) {
