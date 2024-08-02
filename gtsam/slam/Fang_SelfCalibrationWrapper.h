@@ -107,10 +107,48 @@ class SelfCalibrationWrapper {
 
 
 
+
+    bool add_keypoints_2d_robust (size_t ith_pose, size_t jth_landmark, const Eigen::Vector2d& img_kpts, double sigma = 1.0, double kernelParam = 1.345)
+    {
+      /** image noise */
+      auto img_noise = gtsam::noiseModel::Isotropic::Sigma(2, sigma);
+      /** roubust kernel noise model */
+      auto img_noise_robust = noiseModel::Robust::Create(noiseModel::mEstimator::Huber::Create(kernelParam), img_noise);
+
+      /** add factor and its measurement */
+      if (ith_pose == fixed_pose_id_)
+      {
+        graph_.emplace_shared<FixedPoseSelfCalibrationFactor>(
+            img_kpts,
+            ptr_fixed_pose_,
+            img_noise_robust,
+            gtsam::Symbol('l', jth_landmark),
+            gtsam::Symbol('K', 0)
+            );
+        return true;
+      }
+      else
+      {
+        graph_.emplace_shared<SelfCalibrationFactor>(
+            img_kpts,
+            img_noise_robust,
+            gtsam::Symbol('x', ith_pose),
+            gtsam::Symbol('l', jth_landmark),
+            gtsam::Symbol('K', 0)
+            );
+        return true;
+      }
+      return false;
+    }
+
+
+
+
     bool add_keypoints_2d (size_t ith_pose, size_t jth_landmark, const Eigen::Vector2d& img_kpts, double sigma = 1.0)
     {
       /** image noise */
       auto img_noise = gtsam::noiseModel::Isotropic::Sigma(2, sigma);
+
       /** add factor and its measurement */
       if (ith_pose == fixed_pose_id_)
       {
@@ -192,6 +230,19 @@ class SelfCalibrationWrapper {
     }
 
 
+    template <typename Landmark3DArrayType>
+    void optimize_from_3view (double & focal, double & kappa, double & u0, double & v0,
+                              Eigen::Matrix4d & pose1, Eigen::Matrix4d & pose2, Eigen::Matrix4d & pose3, 
+                              Landmark3DArrayType & landmarks_3d)
+    {
+      std::vector<Eigen::Matrix4d> poses;
+      poses.push_back(pose1); poses.push_back(pose2); poses.push_back(pose3);
+      this->optimize_from (focal, kappa, u0, v0, poses, landmarks_3d);
+      pose1 = poses[0]; pose2 = poses[1]; pose2 = poses[2];
+    }
+
+
+
 
     void optimize_from (double & focal, double & kappa, double & u0, double & v0,
                         std::vector<Eigen::Matrix4d> & poses, std::vector<Eigen::Vector3d> & landmarks_3d) 
@@ -216,26 +267,26 @@ class SelfCalibrationWrapper {
     {
       // fix the scale. There're several tricks for this.
       // This is difficult because scale is sensitive to initialization.
-      if (0)
-      {
-        size_t ith_pose = 0, jth_landmark = 0;
-        double sigma = 0.1;
-        Pose3 pose(poses[ith_pose]);
-        Point3 pt(landmarks_3d.row(jth_landmark)[0], landmarks_3d.row(jth_landmark)[1], landmarks_3d.row(jth_landmark)[2]);
-        double depthij = pose.transformTo(pt)[2];
-        this->add_landmark_depth_prior (ith_pose, jth_landmark, depthij, sigma*depthij);
-        printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
-      }
-      if (0)
-      {
-        size_t ith_pose = 0, jth_landmark = landmarks_3d.rows()-1;
-        double sigma = 0.1;
-        Pose3 pose(poses[ith_pose]);
-        Point3 pt(landmarks_3d.row(jth_landmark)[0], landmarks_3d.row(jth_landmark)[1], landmarks_3d.row(jth_landmark)[2]);
-        double depthij = pose.transformTo(pt)[2];
-        this->add_landmark_depth_prior (ith_pose, jth_landmark, depthij, sigma*depthij);
-        printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
-      }
+      // if (0)
+      // {
+      //   size_t ith_pose = 0, jth_landmark = 0;
+      //   double sigma = 0.1;
+      //   Pose3 pose(poses[ith_pose]);
+      //   Point3 pt(landmarks_3d.row(jth_landmark)[0], landmarks_3d.row(jth_landmark)[1], landmarks_3d.row(jth_landmark)[2]);
+      //   double depthij = pose.transformTo(pt)[2];
+      //   this->add_landmark_depth_prior (ith_pose, jth_landmark, depthij, sigma*depthij);
+      //   printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
+      // }
+      // if (0)
+      // {
+      //   size_t ith_pose = 0, jth_landmark = landmarks_3d.rows()-1;
+      //   double sigma = 0.1;
+      //   Pose3 pose(poses[ith_pose]);
+      //   Point3 pt(landmarks_3d.row(jth_landmark)[0], landmarks_3d.row(jth_landmark)[1], landmarks_3d.row(jth_landmark)[2]);
+      //   double depthij = pose.transformTo(pt)[2];
+      //   this->add_landmark_depth_prior (ith_pose, jth_landmark, depthij, sigma*depthij);
+      //   printf("Fix Depth of Landmark %d from Pose %d to %f \n", static_cast<int>(ith_pose), static_cast<int>(jth_landmark), depthij);
+      // }
 
   
     // if(0)
@@ -388,6 +439,30 @@ class SelfCalibrationWrapper {
       }
 
     }
+
+
+
+    double get_reproj_error () const 
+    {
+
+      double total_error = 0.;
+      for (auto iter = graph_.begin(); iter != graph_.end(); iter++)
+      {
+
+              // total_error += iter->error();
+
+              // need to get rid of prior factors, usign key()?
+
+      }
+      return total_error;
+
+      // evaluateError(const Pose3& pose3, const Point3& point, const CALIBRATION &calib);
+      // PinholeCamera<CALIBRATION> Camera;
+      // Camera camera(pose3,calib);
+      // return camera.project(point) - measured_;
+
+    }
+
 
 
 
