@@ -113,7 +113,7 @@ class SelfCalibrationWrapper {
       /** image noise */
       auto img_noise = gtsam::noiseModel::Isotropic::Sigma(2, sigma);
       /** roubust kernel noise model */
-      auto img_noise_robust = noiseModel::Robust::Create(noiseModel::mEstimator::Huber::Create(kernelParam), img_noise);
+      auto img_noise_robust = noiseModel::Robust::Create(noiseModel::mEstimator::Cauchy::Create(kernelParam), img_noise);
 
       /** add factor and its measurement */
       if (ith_pose == fixed_pose_id_)
